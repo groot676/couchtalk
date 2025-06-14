@@ -22,16 +22,11 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   const gaId = process.env.NEXT_PUBLIC_GA_ID;
-  
-  // Debug line - remove after fixing
-  console.log('GA ID:', gaId);
 
   return (
     <html lang="en">
       <body className={inter.className}>
         {children}
-        {/* Debug info - remove after fixing */}
-        <div style={{ display: 'none' }}>GA ID: {gaId || 'NOT FOUND'}</div>
         {gaId && (
           <>
             <Script
