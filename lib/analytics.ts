@@ -1,3 +1,18 @@
+// Add gtag to the window interface
+declare global {
+  interface Window {
+    gtag: (
+      command: string,
+      action: string,
+      parameters?: {
+        event_category?: string;
+        event_label?: string;
+        value?: number;
+      }
+    ) => void;
+  }
+}
+
 // Helper function to track events
 export const trackEvent = (action: string, category: string, label?: string, value?: number) => {
   if (typeof window !== 'undefined' && window.gtag) {
