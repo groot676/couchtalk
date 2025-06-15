@@ -1,16 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Users, Copy, Check } from 'lucide-react';
 import Link from 'next/link';
-
-export const dynamic = 'force-dynamic';
+import { SupabaseClient } from '@supabase/supabase-js';
 
 export default function CoupleStartPage() {
   const router = useRouter();
-  const supabase = createClient();
+  const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
   
   const [mode, setMode] = useState<'create' | 'join'>('create');
   const [sessionCode, setSessionCode] = useState('');
@@ -19,6 +18,11 @@ export default function CoupleStartPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+
+  // Initialize Supabase client when component mounts
+  useEffect(() => {
+    setSupabase(createClient());
+  }, []);
 
   // Generate a random session code
   const generateSessionCode = () => {
@@ -30,6 +34,8 @@ export default function CoupleStartPage() {
 
   // Create a new couple's session
   const handleCreateSession = async () => {
+    if (!supabase) return;
+    
     setLoading(true);
     setError('');
 
@@ -75,6 +81,8 @@ export default function CoupleStartPage() {
 
   // Join an existing session
   const handleJoinSession = async () => {
+    if (!supabase) return;
+    
     setLoading(true);
     setError('');
 
@@ -127,7 +135,6 @@ export default function CoupleStartPage() {
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
-
       setLoading(false);
     }
   };
@@ -192,7 +199,7 @@ export default function CoupleStartPage() {
                   </p>
                   <button
                     onClick={handleCreateSession}
-                    disabled={loading}
+                    disabled={loading || !supabase}
                     className="w-full py-3 px-4 bg-gradient-to-r from-gray-800 to-gray-900 text-white font-semibold rounded-lg hover:from-gray-900 hover:to-black transition-all disabled:opacity-50"
                   >
                     {loading ? 'Creating Session...' : 'Create Session'}
@@ -213,7 +220,7 @@ export default function CoupleStartPage() {
                   />
                   <button
                     onClick={handleJoinSession}
-                    disabled={loading || !joinCode}
+                    disabled={loading || !joinCode || !supabase}
                     className="w-full py-3 px-4 bg-gradient-to-r from-gray-800 to-gray-900 text-white font-semibold rounded-lg hover:from-gray-900 hover:to-black transition-all disabled:opacity-50"
                   >
                     {loading ? 'Joining...' : 'Join Session'}
