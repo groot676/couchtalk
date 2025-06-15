@@ -38,20 +38,35 @@ export default async function CoupleChatPage({ params }: PageProps) {
     redirect('/couple/start');
   }
 
+  // Debug log
+  console.log('Couple session data:', coupleSession);
+  console.log('Current user ID:', user.id);
+  console.log('Partner1 ID:', coupleSession.partner1_id);
+  console.log('Partner2 ID:', coupleSession.partner2_id);
+
   // Get partner info if they've joined
   let partnerProfile = null;
-  if (coupleSession.partner2_id) {
+  if (coupleSession.partner2_id && coupleSession.partner1_id) {
     const partnerId = coupleSession.partner1_id === user.id 
       ? coupleSession.partner2_id 
       : coupleSession.partner1_id;
     
-    const { data } = await supabase
-      .from('user_profiles')
-      .select('*')
-      .eq('id', partnerId)
-      .single();
+    console.log('Partner ID to fetch:', partnerId);
     
-    partnerProfile = data;
+    if (partnerId) {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', partnerId)
+        .single();
+      
+      if (error) {
+        console.error('Error fetching partner profile:', error);
+      } else {
+        console.log('Partner profile:', data);
+        partnerProfile = data;
+      }
+    }
   }
 
   return (

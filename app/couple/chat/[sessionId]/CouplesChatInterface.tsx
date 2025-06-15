@@ -36,58 +36,173 @@ export function CouplesChatInterface({
 }: CouplesChatInterfaceProps) {
   const router = useRouter();
   const supabase = createClient();
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 'initial',
-      content: "Welcome to your couple's session! I'm here to help facilitate a meaningful conversation between you both. Remember to speak from your own experience using 'I feel' statements, and take turns listening to each other. What would you like to discuss today?",
-      sender_type: 'ai',
-      sender_id: null,
-      created_at: new Date().toISOString(),
-      sender_name: 'CouchTalk'
-    }
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isWaiting, setIsWaiting] = useState(initialWaiting);
   const [copied, setCopied] = useState(false);
+  const [effectivePartnerName, setEffectivePartnerName] = useState<string | null>(partnerName || null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const channelRef = useRef<any>(null);
+  const hasLoadedRef = useRef(false);
+  const hasCreatedWelcomeRef = useRef(false);
 
-  // Load existing messages
-  useEffect(() => {
-    const loadMessages = async () => {
-      const { data } = await supabase
-        .from('messages')
-        .select('*')
+  console.log('CouplesChatInterface initialized with:', {
+    sessionId,
+    sessionCode,
+    userId,
+    userName,
+    partnerName,
+    isWaiting: initialWaiting
+  });
+
+  // Function to load messages
+  const loadMessages = async () => {
+    if (!sessionId) {
+      console.error('No session ID provided');
+      return;
+    }
+    
+    console.log('Loading messages for session:', sessionId);
+    console.log('Current userId:', userId);
+    console.log('Current userName:', userName);
+    console.log('Current partnerName:', partnerName);
+    
+    const { data: existingMessages, error } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('session_id', sessionId)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('Error loading messages:', error);
+      return;
+    }
+
+    console.log('Raw messages from database:', existingMessages);
+
+    // If we don't have a partner name, try to get it from the couple session
+    let localPartnerName = effectivePartnerName || partnerName;
+    if (!localPartnerName && existingMessages && existingMessages.length > 0) {
+      const { data: coupleSession } = await supabase
+        .from('couple_sessions')
+        .select('partner1_id, partner2_id')
         .eq('session_id', sessionId)
-        .order('created_at', { ascending: true });
+        .single();
 
-      if (data && data.length > 0) {
-        setMessages(data.map(msg => ({
+      if (coupleSession) {
+        const partnerId = coupleSession.partner1_id === userId 
+          ? coupleSession.partner2_id 
+          : coupleSession.partner1_id;
+
+        if (partnerId) {
+          const { data: partnerProfile } = await supabase
+            .from('user_profiles')
+            .select('name')
+            .eq('id', partnerId)
+            .single();
+
+          if (partnerProfile && partnerProfile.name) {
+            localPartnerName = partnerProfile.name;
+            setEffectivePartnerName(partnerProfile.name);
+            console.log('Fetched partner name from database:', partnerProfile.name);
+          }
+        }
+      }
+    }
+
+    if (existingMessages) {
+      const formattedMessages = existingMessages.map(msg => {
+        let senderName = 'CouchTalk';
+        if (msg.sender_type === 'user') {
+          senderName = msg.sender_id === userId ? userName : (localPartnerName || 'Partner');
+        }
+        
+        return {
           ...msg,
-          sender_name: msg.sender_type === 'ai' ? 'CouchTalk' : 
-                       msg.sender_id === userId ? userName : partnerName || 'Partner'
-        })));
-      } else {
-        // Save initial message if this is a new session
-        const initialMessage = {
-          content: "Welcome to your couple's session! I'm here to help facilitate a meaningful conversation between you both. Remember to speak from your own experience using 'I feel' statements, and take turns listening to each other. What would you like to discuss today?",
-          sender_type: 'ai' as const,
-          sender_id: null,
-          sender_name: 'CouchTalk'
+          sender_name: senderName
         };
-        await saveMessage(initialMessage);
+      });
+      
+      console.log('Formatted messages:', formattedMessages);
+      setMessages(formattedMessages);
+    }
+  };
+
+  // Initial load
+  useEffect(() => {
+    if (!isWaiting && !hasLoadedRef.current) {
+      hasLoadedRef.current = true;
+      loadMessages();
+    }
+  }, [isWaiting]);
+
+  // Create welcome message when both partners have joined
+  useEffect(() => {
+    const createWelcomeMessage = async () => {
+      if (isWaiting || hasCreatedWelcomeRef.current || !sessionId) return;
+      
+      // Check if welcome message already exists
+      const { data: existingMessages } = await supabase
+        .from('messages')
+        .select('id')
+        .eq('session_id', sessionId)
+        .eq('sender_type', 'ai')
+        .limit(1);
+
+      if (existingMessages && existingMessages.length > 0) {
+        console.log('Welcome message already exists');
+        return;
+      }
+
+      // Check if both partners have joined
+      const { data: coupleSession } = await supabase
+        .from('couple_sessions')
+        .select('partner1_id, partner2_id')
+        .eq('session_id', sessionId)
+        .single();
+      
+      if (coupleSession && coupleSession.partner2_id && coupleSession.partner1_id === userId) {
+        hasCreatedWelcomeRef.current = true;
+        console.log('Creating welcome message...');
+        
+        const { error } = await supabase
+          .from('messages')
+          .insert({
+            session_id: sessionId,
+            sender_id: null,
+            sender_type: 'ai',
+            content: "Welcome to your couple's session! I'm here to help facilitate a meaningful conversation between you both. Remember to speak from your own experience using 'I feel' statements, and take turns listening to each other. What would you like to discuss today?"
+          });
+
+        if (error) {
+          console.error('Error creating welcome message:', error);
+          hasCreatedWelcomeRef.current = false;
+        } else {
+          console.log('Welcome message created successfully');
+          // Reload messages to show the welcome message
+          await loadMessages();
+        }
       }
     };
 
-    loadMessages();
-  }, [sessionId, supabase, userId, userName, partnerName]);
+    createWelcomeMessage();
+  }, [isWaiting, sessionId, userId, supabase]);
 
-  // Set up real-time subscription
+  // Set up real-time subscription and polling
   useEffect(() => {
-    // Subscribe to couple session updates
-    const coupleChannel = supabase
-      .channel(`couple_session:${sessionId}`)
+    if (!sessionId) return;
+
+    console.log('Setting up realtime subscription for session:', sessionId);
+
+    // Set up polling as fallback - more frequent initially
+    const pollInterval = setInterval(() => {
+      console.log('Polling for new messages...');
+      loadMessages();
+    }, 2000); // Poll every 2 seconds
+
+    // Set up realtime subscription
+    const channel = supabase
+      .channel(`room-${sessionId}`)
       .on(
         'postgres_changes',
         {
@@ -97,17 +212,14 @@ export function CouplesChatInterface({
           filter: `session_id=eq.${sessionId}`
         },
         (payload) => {
-          if (payload.new.status === 'active') {
+          console.log('Couple session update:', payload);
+          if (payload.new.status === 'active' && isWaiting) {
             setIsWaiting(false);
-            router.refresh(); // Refresh to get partner info
+            // Force a page refresh to get partner info
+            window.location.reload();
           }
         }
       )
-      .subscribe();
-
-    // Subscribe to new messages
-    const messageChannel = supabase
-      .channel(`messages:${sessionId}`)
       .on(
         'postgres_changes',
         {
@@ -117,41 +229,30 @@ export function CouplesChatInterface({
           filter: `session_id=eq.${sessionId}`
         },
         (payload) => {
-          const newMessage = payload.new as any;
-          setMessages(prev => [...prev, {
-            ...newMessage,
-            sender_name: newMessage.sender_type === 'ai' ? 'CouchTalk' : 
-                        newMessage.sender_id === userId ? userName : partnerName || 'Partner'
-          }]);
+          console.log('New message via realtime:', payload);
+          // Just reload all messages to ensure consistency
+          loadMessages();
         }
       )
-      .subscribe();
-
-    channelRef.current = { coupleChannel, messageChannel };
+      .subscribe((status) => {
+        console.log('Channel subscription status:', status);
+      });
 
     return () => {
-      coupleChannel.unsubscribe();
-      messageChannel.unsubscribe();
+      console.log('Cleaning up subscriptions');
+      clearInterval(pollInterval);
+      channel.unsubscribe();
     };
-  }, [sessionId, supabase, userId, userName, partnerName, router]);
+  }, [sessionId, isWaiting]);
 
   // Auto-scroll
   useEffect(() => {
-    if (scrollAreaRef.current) {
-      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
+    // ScrollArea component has a viewport child that actually scrolls
+    const scrollElement = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
+    if (scrollElement) {
+      scrollElement.scrollTop = scrollElement.scrollHeight;
     }
   }, [messages]);
-
-  const saveMessage = async (message: Omit<Message, 'id' | 'created_at'>) => {
-    await supabase
-      .from('messages')
-      .insert({
-        session_id: sessionId,
-        sender_id: message.sender_id,
-        sender_type: message.sender_type,
-        content: message.content
-      });
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -161,21 +262,32 @@ export function CouplesChatInterface({
     setInput('');
     setIsLoading(true);
 
-    // Save user message
-    await saveMessage({
-      content: userMessage,
-      sender_type: 'user',
-      sender_id: userId,
-      sender_name: userName
-    });
-
     try {
-      // Format messages for API - only include actual message content
+      console.log('Sending message:', userMessage);
+      console.log('Session ID for message:', sessionId);
+      
+      // Save user message to database
+      const { error: saveError } = await supabase
+        .from('messages')
+        .insert({
+          session_id: sessionId,
+          sender_id: userId,
+          sender_type: 'user',
+          content: userMessage
+        });
+
+      if (saveError) {
+        console.error('Error saving user message:', saveError);
+        throw saveError;
+      }
+
+      console.log('User message saved successfully');
+      
+      // Format messages for API
       const apiMessages = messages
-        .filter(m => m.id !== 'initial') // Skip the initial message if it has this ID
         .map(m => ({
           role: m.sender_type === 'ai' ? 'assistant' : 'user',
-          content: `${m.sender_name}: ${m.content}`
+          content: m.sender_type === 'ai' ? m.content : `${m.sender_name}: ${m.content}`
         }))
         .concat({ 
           role: 'user', 
@@ -197,6 +309,17 @@ export function CouplesChatInterface({
       const decoder = new TextDecoder();
       let assistantMessage = '';
 
+      // Show streaming AI response locally
+      const tempAiMessageId = `temp-ai-${Date.now()}`;
+      setMessages(prev => [...prev, {
+        id: tempAiMessageId,
+        content: '',
+        sender_type: 'ai',
+        sender_id: null,
+        created_at: new Date().toISOString(),
+        sender_name: 'CouchTalk'
+      }]);
+
       if (reader) {
         while (true) {
           const { done, value } = await reader.read();
@@ -204,18 +327,47 @@ export function CouplesChatInterface({
           
           const chunk = decoder.decode(value);
           assistantMessage += chunk;
+          
+          // Update the temporary AI message
+          setMessages(prev => prev.map(msg => 
+            msg.id === tempAiMessageId 
+              ? { ...msg, content: assistantMessage }
+              : msg
+          ));
         }
         
-        // Save AI message
-        await saveMessage({
-          content: assistantMessage,
-          sender_type: 'ai',
-          sender_id: null,
-          sender_name: 'CouchTalk'
-        });
+        // Remove temporary AI message
+        setMessages(prev => prev.filter(msg => msg.id !== tempAiMessageId));
+        
+        // Save AI message to database
+        const { error: aiError } = await supabase
+          .from('messages')
+          .insert({
+            session_id: sessionId,
+            sender_id: null,
+            sender_type: 'ai',
+            content: assistantMessage
+          });
+
+        if (aiError) {
+          console.error('Error saving AI message:', aiError);
+        } else {
+          console.log('AI message saved successfully');
+        }
       }
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Error in handleSubmit:', error);
+      
+      // Show error message
+      const errorMessage: Message = {
+        id: `error-${Date.now()}`,
+        content: "I'm sorry, I'm having trouble connecting right now. Please try again.",
+        sender_type: 'ai',
+        sender_id: null,
+        created_at: new Date().toISOString(),
+        sender_name: 'CouchTalk'
+      };
+      setMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
     }
@@ -265,9 +417,9 @@ export function CouplesChatInterface({
   }
 
   return (
-    <div className="flex flex-col h-[700px] w-full max-w-4xl mx-auto bg-white/90 backdrop-blur-md rounded-2xl shadow-2xl overflow-hidden border border-gray-200/50">
+    <div className="flex flex-col h-[calc(100vh-4rem)] max-h-[800px] w-full max-w-4xl mx-auto bg-white/90 backdrop-blur-md rounded-2xl shadow-2xl overflow-hidden border border-gray-200/50">
       {/* Header */}
-      <div className="bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 p-6 text-white">
+      <div className="bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 p-6 text-white flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-white/10 rounded-full backdrop-blur-sm">
@@ -276,19 +428,30 @@ export function CouplesChatInterface({
             <div>
               <h2 className="text-xl font-bold">Couple's Session</h2>
               <p className="text-sm text-white/70">
-                {userName} & {partnerName || 'Partner'} with CouchTalk
+                {userName} & {effectivePartnerName || partnerName || 'Partner'} with CouchTalk
               </p>
             </div>
           </div>
-          <div className="text-sm text-white/60">
-            Code: {sessionCode}
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => loadMessages()}
+              className="text-white/60 hover:text-white transition-colors"
+              title="Refresh messages"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+            <div className="text-sm text-white/60">
+              Code: {sessionCode}
+            </div>
           </div>
         </div>
       </div>
 
       {/* Messages */}
-      <ScrollArea className="flex-1 p-6 bg-gradient-to-b from-gray-50 to-white" ref={scrollAreaRef}>
-        <div className="space-y-4">
+      <ScrollArea className="flex-1 min-h-0 p-6 bg-gradient-to-b from-gray-50 to-white" ref={scrollAreaRef}>
+        <div className="space-y-4 pb-4">
           {messages.length === 0 && (
             <div className="text-center py-8">
               <p className="text-gray-500 mb-2">Welcome to your couple's session!</p>
@@ -321,7 +484,7 @@ export function CouplesChatInterface({
                     ? 'text-white/70'
                     : 'text-gray-500'
                 }`}>
-                  {message.sender_name}
+                  {message.sender_name || `User ${message.sender_id?.slice(-4) || 'Unknown'}`}
                 </div>
                 <p className="whitespace-pre-wrap leading-relaxed text-sm">
                   {message.content}
@@ -344,7 +507,7 @@ export function CouplesChatInterface({
       </ScrollArea>
 
       {/* Input */}
-      <form onSubmit={handleSubmit} className="p-6 bg-white border-t border-gray-100">
+      <form onSubmit={handleSubmit} className="p-6 bg-white border-t border-gray-100 flex-shrink-0">
         <div className="flex gap-3">
           <Input
             value={input}
