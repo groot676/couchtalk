@@ -67,8 +67,10 @@ export function ChatInterface() {
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    if (scrollAreaRef.current) {
-      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
+    // ScrollArea component has a viewport child that actually scrolls
+    const scrollElement = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
+    if (scrollElement) {
+      scrollElement.scrollTop = scrollElement.scrollHeight;
     }
   }, [messages]);
 
@@ -139,9 +141,9 @@ export function ChatInterface() {
   };
 
   return (
-    <div className="flex flex-col h-[700px] w-full max-w-4xl mx-auto bg-white/90 backdrop-blur-md rounded-2xl shadow-2xl overflow-hidden border border-gray-200/50">
+    <div className="flex flex-col h-[calc(100vh-12rem)] max-h-[800px] w-full max-w-4xl mx-auto bg-white/90 backdrop-blur-md rounded-2xl shadow-2xl overflow-hidden border border-gray-200/50">
       {/* Header */}
-      <div className="bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 p-6 text-white">
+      <div className="bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 p-6 text-white flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-white/10 rounded-full backdrop-blur-sm">
@@ -164,8 +166,8 @@ export function ChatInterface() {
       </div>
 
       {/* Messages */}
-      <ScrollArea className="flex-1 p-6 bg-gradient-to-b from-gray-50 to-white" ref={scrollAreaRef}>
-        <div className="space-y-4">
+      <ScrollArea className="flex-1 min-h-0 p-6 bg-gradient-to-b from-gray-50 to-white" ref={scrollAreaRef}>
+        <div className="space-y-4 pb-4">
           {messages.map((message, index) => (
             <MessageBubble key={index} message={message} />
           ))}
@@ -183,7 +185,7 @@ export function ChatInterface() {
       </ScrollArea>
 
       {/* Input */}
-      <form onSubmit={handleSubmit} className="p-6 bg-white border-t border-gray-100">
+      <form onSubmit={handleSubmit} className="p-6 bg-white border-t border-gray-100 flex-shrink-0">
         <div className="flex gap-3">
           <Input
             value={input}
