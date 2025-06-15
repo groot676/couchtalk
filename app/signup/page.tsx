@@ -4,11 +4,11 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
-export const dynamic = 'force-dynamic';
+import { SupabaseClient } from '@supabase/supabase-js';
 
 export default function SignUpPage() {
   const router = useRouter();
-  const supabase = createClient();
+  const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
   
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -23,8 +23,15 @@ export default function SignUpPage() {
   const [pronouns, setPronouns] = useState('');
   const [reason, setReason] = useState('');
 
-  // Add useEffect to check auth status
+  // Initialize Supabase client on mount
   useEffect(() => {
+    setSupabase(createClient());
+  }, []);
+
+  // Check auth status after supabase is initialized
+  useEffect(() => {
+    if (!supabase) return;
+    
     const checkUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user && !user.user_metadata?.profile_completed) {
@@ -38,6 +45,8 @@ export default function SignUpPage() {
 
   const handleEmailSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!supabase) return;
+    
     setError('');
     setLoading(true);
 
@@ -69,6 +78,8 @@ export default function SignUpPage() {
 
   const handleProfileSetup = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!supabase) return;
+    
     setError('');
     setLoading(true);
 
@@ -151,7 +162,7 @@ export default function SignUpPage() {
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || !supabase}
                 className="w-full py-3 px-4 bg-gradient-to-r from-indigo-500 to-purple-500 text-white font-semibold rounded-lg hover:from-indigo-600 hover:to-purple-600 transition-all disabled:opacity-50"
               >
                 {loading ? 'Creating Account...' : 'Continue'}
@@ -206,7 +217,7 @@ export default function SignUpPage() {
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || !supabase}
                 className="w-full py-3 px-4 bg-gradient-to-r from-indigo-500 to-purple-500 text-white font-semibold rounded-lg hover:from-indigo-600 hover:to-purple-600 transition-all disabled:opacity-50"
               >
                 {loading ? 'Setting up...' : 'Start Chatting'}

@@ -1,22 +1,29 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
-export const dynamic = 'force-dynamic';
+import { SupabaseClient } from '@supabase/supabase-js';
 
 export default function SignInPage() {
   const router = useRouter();
-  const supabase = createClient();
+  const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Initialize Supabase client on mount
+  useEffect(() => {
+    setSupabase(createClient());
+  }, []);
+
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!supabase) return;
+    
     setError('');
     setLoading(true);
     
@@ -33,12 +40,12 @@ export default function SignInPage() {
       if (error) throw error;
 
       console.log('Sign in successful, redirecting...');
-      router.push('/mode-select');;
+      router.push('/mode-select');
     } catch (error: unknown) {
-  console.error('Sign in error:', error);
-  setError(error instanceof Error ? error.message : 'Invalid login credentials');
-  setLoading(false);
-}
+      console.error('Sign in error:', error);
+      setError(error instanceof Error ? error.message : 'Invalid login credentials');
+      setLoading(false);
+    }
   };
 
   return (
@@ -89,7 +96,7 @@ export default function SignInPage() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !supabase}
               className="w-full py-3 px-4 bg-gradient-to-r from-indigo-500 to-purple-500 text-white font-semibold rounded-lg hover:from-indigo-600 hover:to-purple-600 transition-all disabled:opacity-50"
             >
               {loading ? 'Signing in...' : 'Sign In'}
