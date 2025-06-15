@@ -3,12 +3,13 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 
 interface PageProps {
-  params: {
+  params: Promise<{
     sessionId: string;
-  };
+  }>;
 }
 
 export default async function CoupleChatPage({ params }: PageProps) {
+  const { sessionId } = await params;
   const supabase = await createClient();
   
   const { data: { user } } = await supabase.auth.getUser();
@@ -31,7 +32,7 @@ export default async function CoupleChatPage({ params }: PageProps) {
       *,
       session:sessions(*)
     `)
-    .or(`session_code.eq.${params.sessionId},session_id.eq.${params.sessionId}`)
+    .or(`session_code.eq.${sessionId},session_id.eq.${sessionId}`)
     .single();
 
   if (!coupleSession) {
