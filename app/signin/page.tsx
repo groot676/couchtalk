@@ -33,11 +33,11 @@ export default function SignInPage() {
 
       console.log('Sign in successful, redirecting...');
       router.push('/mode-select');;
-    } catch (error: any) {
-      console.error('Sign in error:', error);
-      setError(error.message);
-      setLoading(false);
-    }
+    } catch (error: unknown) {
+  console.error('Sign in error:', error);
+  setError(error instanceof Error ? error.message : 'Invalid login credentials');
+  setLoading(false);
+}
   };
 
   return (
@@ -97,7 +97,7 @@ export default function SignInPage() {
 
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-600">
-              Don't have an account?{' '}
+              Don&apos;t have an account?{' '}
               <Link href="/signup" className="text-purple-600 hover:text-purple-700 font-medium">
                 Begin your journey
               </Link>

@@ -2,11 +2,11 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 // Protected routes
-const protectedRoutes = ['/chat', '/profile', '/settings', '/mode-select', '/couple']
+// const protectedRoutes = ['/chat', '/profile', '/settings', '/mode-select', '/couple']
 
 export async function updateSession(request: NextRequest) {
   // Create response first
-  let response = NextResponse.next({
+  const response = NextResponse.next({
     request: {
       headers: request.headers,
     },
@@ -36,7 +36,6 @@ export async function updateSession(request: NextRequest) {
   // Define routes
   const isSignInPage = request.nextUrl.pathname === '/signin'
   const isSignUpPage = request.nextUrl.pathname === '/signup'
-  const isHomePage = request.nextUrl.pathname === '/'
   const isChatPage = request.nextUrl.pathname === '/chat'
   const isAuthPage = isSignInPage || isSignUpPage
 

@@ -77,7 +77,7 @@ export default function ModeSelectPage() {
               </div>
               
               <h2 className="text-2xl font-bold text-gray-900 mb-3">
-                Couple's Session
+                Couple&apos;s Session
               </h2>
               
               <p className="text-gray-600 mb-6">

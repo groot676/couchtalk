@@ -64,8 +64,8 @@ export default function CoupleStartPage() {
 
       setSessionCode(code);
       setSessionId(session.id);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
     }
@@ -122,9 +122,10 @@ export default function CoupleStartPage() {
 
       // Redirect to couple's chat
       router.push(`/couple/chat/${coupleSession.session_id}`);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
+
       setLoading(false);
     }
   };
@@ -144,7 +145,7 @@ export default function CoupleStartPage() {
           </div>
 
           <h1 className="text-3xl font-bold text-gray-900 mb-2 text-center">
-            Couple's Session
+            Couple&apos;s Session
           </h1>
           <p className="text-gray-600 mb-8 text-center">
             Connect with your partner for a guided conversation
@@ -239,7 +240,7 @@ export default function CoupleStartPage() {
 
               <div className="space-y-3">
                 <p className="text-sm text-gray-600">
-                  Share this code with your partner. Once they join, you'll both be connected to the same session.
+                  Share this code with your partner. Once they join, you&apos;ll both be connected to the same session.
                 </p>
                 
                 <button

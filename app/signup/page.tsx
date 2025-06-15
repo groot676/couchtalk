@@ -59,8 +59,8 @@ export default function SignUpPage() {
         // User is signed in, proceed to step 2
         setStep(2);
       }
-    } catch (error: any) {
-      setError(error.message);
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : 'An error occurred');
     } finally {
       setLoading(false);
     }
@@ -89,8 +89,8 @@ export default function SignUpPage() {
       if (profileError) throw profileError;
 
       router.push('/mode-select');
-    } catch (error: any) {
-      setError(error.message);
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : 'An error occurred');
     } finally {
       setLoading(false);
     }

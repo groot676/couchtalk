@@ -409,7 +409,7 @@ export function CouplesChatInterface({
           </div>
           
           <p className="text-sm text-gray-600">
-            Once they join with this code, you'll both be connected to start your session.
+            Once they join with this code, you&apos;ll both be connected to start your session.
           </p>
         </div>
       </div>
@@ -426,7 +426,7 @@ export function CouplesChatInterface({
               <Heart className="w-6 h-6 text-amber-400" />
             </div>
             <div>
-              <h2 className="text-xl font-bold">Couple's Session</h2>
+              <h2 className="text-xl font-bold">Couple&apos;s Session</h2>
               <p className="text-sm text-white/70">
                 {userName} & {effectivePartnerName || partnerName || 'Partner'} with CouchTalk
               </p>
@@ -454,7 +454,7 @@ export function CouplesChatInterface({
         <div className="space-y-4 pb-4">
           {messages.length === 0 && (
             <div className="text-center py-8">
-              <p className="text-gray-500 mb-2">Welcome to your couple's session!</p>
+              <p className="text-gray-500 mb-2">Welcome to your couple&apos;s session!</p>
               <p className="text-sm text-gray-400">
                 CouchTalk will help guide your conversation.
               </p>
