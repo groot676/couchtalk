@@ -2,6 +2,7 @@ import { ChatInterface } from '../components/ChatInterface';
 import { SignOutButton } from '../components/SignOutButton';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+export const dynamic = 'force-dynamic';
 
 export default async function ChatPage() {
   const supabase = await createClient();

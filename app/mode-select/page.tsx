@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Heart, User, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
+export const dynamic = 'force-dynamic';
 
 export default function ModeSelectPage() {
   const router = useRouter();

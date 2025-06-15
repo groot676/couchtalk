@@ -1,6 +1,7 @@
 import { CouplesChatInterface } from '@/app/couple/chat/[sessionId]/CouplesChatInterface';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+export const dynamic = 'force-dynamic';
 
 interface PageProps {
   params: Promise<{
