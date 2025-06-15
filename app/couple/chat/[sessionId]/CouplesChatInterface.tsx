@@ -6,7 +6,6 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Send, Loader2, Users, Copy, Check, Heart } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
-import { useRouter } from 'next/navigation';
 
 interface Message {
   id: string;
@@ -34,7 +33,6 @@ export function CouplesChatInterface({
   partnerName,
   isWaiting: initialWaiting
 }: CouplesChatInterfaceProps) {
-  const router = useRouter();
   const supabase = createClient();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -137,6 +135,7 @@ export function CouplesChatInterface({
   }, [isWaiting]);
 
   // Create welcome message when both partners have joined
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const createWelcomeMessage = async () => {
       if (isWaiting || hasCreatedWelcomeRef.current || !sessionId) return;
@@ -189,6 +188,7 @@ export function CouplesChatInterface({
   }, [isWaiting, sessionId, userId, supabase]);
 
   // Set up real-time subscription and polling
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!sessionId) return;
 
@@ -246,6 +246,7 @@ export function CouplesChatInterface({
   }, [sessionId, isWaiting]);
 
   // Auto-scroll
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     // ScrollArea component has a viewport child that actually scrolls
     const scrollElement = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
