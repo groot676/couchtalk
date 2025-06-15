@@ -48,7 +48,7 @@ export async function updateSession(request: NextRequest) {
 
   if (user && isAuthPage) {
     // Logged in, trying to access auth pages
-    return NextResponse.redirect(new URL('/chat', request.url))
+    return NextResponse.redirect(new URL('/mode-select', request.url))
   }
 
   return response

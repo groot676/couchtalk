@@ -29,7 +29,7 @@ export default function SignUpPage() {
       if (user && !user.user_metadata?.profile_completed) {
         setStep(2);
       } else if (user && user.user_metadata?.profile_completed) {
-        router.push('/chat');
+        router.push('/mode-select');
       }
     };
     checkUser();
@@ -88,7 +88,7 @@ export default function SignUpPage() {
 
       if (profileError) throw profileError;
 
-      router.push('/mode-select');;
+      router.push('/mode-select');
     } catch (error: any) {
       setError(error.message);
     } finally {

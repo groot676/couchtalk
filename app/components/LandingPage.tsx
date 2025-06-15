@@ -41,7 +41,6 @@ export function LandingPage() {
           <div className="logo">CouchTalk</div>
           <div className="auth-buttons">
             <Link href="/signin" className="btn btn-secondary">Sign in</Link>
-            <Link href="/signup" className="btn btn-primary">Begin journey</Link>
           </div>
         </header>
         
