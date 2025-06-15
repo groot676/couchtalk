@@ -6,6 +6,8 @@ import { createClient } from '@/lib/supabase/client';
 import { Users, Copy, Check } from 'lucide-react';
 import Link from 'next/link';
 
+export const dynamic = 'force-dynamic';
+
 export default function CoupleStartPage() {
   const router = useRouter();
   const supabase = createClient();
