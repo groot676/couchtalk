@@ -21,12 +21,12 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         className={cn(
           'max-w-[80%] rounded-2xl px-5 py-3 text-sm shadow-sm transition-all',
           isUser
-            ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white'
+            ? 'bg-gradient-to-r from-gray-800 to-gray-900 text-white'
             : 'bg-white border border-gray-200 text-gray-800'
         )}
       >
         {!isUser && (
-          <div className="text-xs text-purple-600 font-medium mb-1">MindSpace</div>
+          <div className="text-xs text-amber-600 font-medium mb-1">CouchTalk</div>
         )}
         <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
       </div>

@@ -13,7 +13,7 @@ export function LandingPage() {
   }, []);
 
   const handleGetStarted = () => {
-    router.push('/chat');
+    router.push('/signup');
   };
 
   return (
@@ -39,16 +39,9 @@ export function LandingPage() {
         {/* Header */}
         <header className="header">
           <div className="logo">CouchTalk</div>
-          <nav className="nav">
-            <a href="#experience" className="nav-link">Experience</a>
-            <a href="#approach" className="nav-link">Approach</a>
-            <a href="#membership" className="nav-link">Membership</a>
-          </nav>
           <div className="auth-buttons">
             <Link href="/signin" className="btn btn-secondary">Sign in</Link>
-            <button onClick={handleGetStarted} className="btn btn-primary">
-              Begin journey
-            </button>
+            <Link href="/signup" className="btn btn-primary">Begin journey</Link>
           </div>
         </header>
         
@@ -59,30 +52,15 @@ export function LandingPage() {
               Find your <span className="highlight">sanctuary</span> in the comfort of conversation
             </h1>
             <p className="subtitle">
-              Step into a space where warmth meets wisdom. Experience therapy 
-              that feels like a conversation with your most trusted confidant, 
-              available whenever you need it.
+              Experience therapy that feels like talking with your most trusted friend. 
+              Connect solo or bring your partner for guided conversations together.
             </p>
             <div className="cta-container">
               <button onClick={handleGetStarted} className="cta-primary">
                 Start your session
               </button>
-              <button className="cta-secondary">Take a tour</button>
             </div>
             <div className="trust-indicators">
-              <div className="trust-item">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5z"/>
-                </svg>
-                <span>Complete privacy</span>
-              </div>
-              <div className="trust-item">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
-                  <path d="M22 4L12 14.01l-3-3"/>
-                </svg>
-                <span>Evidence-based care</span>
-              </div>
               <div className="trust-item">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
@@ -92,11 +70,6 @@ export function LandingPage() {
             </div>
           </div>
         </section>
-      </div>
-      
-      {/* Premium Badge */}
-      <div className="premium-badge">
-        Trusted by 50,000+ members worldwide
       </div>
     </div>
   );
