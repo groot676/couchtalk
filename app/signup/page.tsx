@@ -100,6 +100,25 @@ export default function SignUpPage() {
 
       if (profileError) throw profileError;
 
+      // Set up encryption for the new user
+      console.log('Setting up encryption for new user...');
+      try {
+        const response = await fetch('/api/ensure-encryption', { 
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          console.log('Encryption setup result:', result);
+        }
+      } catch (encryptionError) {
+        console.error('Error setting up encryption:', encryptionError);
+        // Don't block sign up if encryption setup fails
+      }
+
       router.push('/mode-select');
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : 'An error occurred');

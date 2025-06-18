@@ -17,6 +17,7 @@ interface Message {
 export function ChatInterface() {
   const supabase = createClient();
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([
     { role: 'assistant', content: INITIAL_MESSAGE }
   ]);
@@ -29,6 +30,8 @@ export function ChatInterface() {
     const initSession = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+
+      setUserId(user.id);
 
       // Create a new session
       const { data: session, error } = await supabase
@@ -48,23 +51,6 @@ export function ChatInterface() {
     initSession();
   }, [supabase]);
 
-  // Save message to database
-  const saveMessage = async (message: Message) => {
-    if (!sessionId) return;
-
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    await supabase
-      .from('messages')
-      .insert({
-        session_id: sessionId,
-        sender_id: message.role === 'user' ? user.id : null,
-        sender_type: message.role === 'user' ? 'user' : 'ai',
-        content: message.content
-      });
-  };
-
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     // ScrollArea component has a viewport child that actually scrolls
@@ -76,7 +62,7 @@ export function ChatInterface() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isLoading) return;
+    if (!input.trim() || isLoading || !sessionId || !userId) return;
 
     const userMessage = input.trim();
     const newUserMessage = { role: 'user' as const, content: userMessage };
@@ -85,22 +71,38 @@ export function ChatInterface() {
     setMessages(prev => [...prev, newUserMessage]);
     setIsLoading(true);
 
-    // Save user message
-    await saveMessage(newUserMessage);
-
     try {
-      const response = await fetch('/api/chat', {
+      // Save user message with encryption
+      const response = await fetch('/api/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: [...messages, newUserMessage]
+          sessionId,
+          userId,
+          content: userMessage,
+          senderType: 'user'
         }),
       });
 
-      if (!response.ok) throw new Error('Failed to get response');
+      if (!response.ok) {
+        throw new Error('Failed to save message');
+      }
+
+      // Get AI response
+      const chatResponse = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [...messages, newUserMessage],
+          sessionId,
+          userId
+        }),
+      });
+
+      if (!chatResponse.ok) throw new Error('Failed to get response');
 
       // Handle streaming response
-      const reader = response.body?.getReader();
+      const reader = chatResponse.body?.getReader();
       const decoder = new TextDecoder();
       let assistantMessage = '';
 
@@ -123,9 +125,6 @@ export function ChatInterface() {
             return newMessages;
           });
         }
-        
-        // Save complete assistant message
-        await saveMessage({ role: 'assistant', content: assistantMessage });
       }
     } catch (error) {
       console.error('Error:', error);
@@ -134,7 +133,6 @@ export function ChatInterface() {
         content: "I'm sorry, I'm having trouble connecting right now. Please try again."
       };
       setMessages(prev => [...prev, errorMessage]);
-      await saveMessage(errorMessage);
     } finally {
       setIsLoading(false);
     }

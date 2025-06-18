@@ -39,6 +39,25 @@ export default function SignInPage() {
 
       if (error) throw error;
 
+      // Ensure user has encryption key after successful sign in
+      console.log('Setting up encryption for user...');
+      try {
+        const response = await fetch('/api/ensure-encryption', { 
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          console.log('Encryption setup result:', result);
+        }
+      } catch (encryptionError) {
+        console.error('Error setting up encryption:', encryptionError);
+        // Don't block sign in if encryption setup fails
+      }
+
       console.log('Sign in successful, redirecting...');
       router.push('/mode-select');
     } catch (error: unknown) {

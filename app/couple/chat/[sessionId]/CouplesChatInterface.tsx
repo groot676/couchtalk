@@ -40,9 +40,10 @@ export function CouplesChatInterface({
   const [isWaiting, setIsWaiting] = useState(initialWaiting);
   const [copied, setCopied] = useState(false);
   const [effectivePartnerName, setEffectivePartnerName] = useState<string | null>(partnerName || null);
+  const [sessionCreatorId, setSessionCreatorId] = useState<string | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const hasLoadedRef = useRef(false);
-  const hasCreatedWelcomeRef = useRef(false);
+  const welcomeMessageCheckRef = useRef(false);
 
   console.log('CouplesChatInterface initialized with:', {
     sessionId,
@@ -52,6 +53,26 @@ export function CouplesChatInterface({
     partnerName,
     isWaiting: initialWaiting
   });
+
+  // Get session creator ID immediately
+  useEffect(() => {
+    const getSessionCreatorId = async () => {
+      if (!sessionId || sessionCreatorId) return;
+      
+      const { data: coupleSession } = await supabase
+        .from('couple_sessions')
+        .select('partner1_id')
+        .eq('session_id', sessionId)
+        .single();
+      
+      if (coupleSession && coupleSession.partner1_id) {
+        setSessionCreatorId(coupleSession.partner1_id);
+        console.log('Session creator ID set:', coupleSession.partner1_id);
+      }
+    };
+    
+    getSessionCreatorId();
+  }, [sessionId, sessionCreatorId, supabase]);
 
   // Function to load messages
   const loadMessages = async () => {
@@ -65,64 +86,70 @@ export function CouplesChatInterface({
     console.log('Current userName:', userName);
     console.log('Current partnerName:', partnerName);
     
-    const { data: existingMessages, error } = await supabase
-      .from('messages')
-      .select('*')
-      .eq('session_id', sessionId)
-      .order('created_at', { ascending: true });
+    // Get messages using the API to ensure proper decryption
+    try {
+      const response = await fetch(`/api/messages?sessionId=${sessionId}&userId=${userId}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch messages');
+      }
+      
+      const { messages: fetchedMessages } = await response.json();
+      console.log('Messages from API:', fetchedMessages);
 
-    if (error) {
-      console.error('Error loading messages:', error);
-      return;
-    }
+      // If we don't have a partner name, try to get it from the couple session
+      let localPartnerName = effectivePartnerName || partnerName;
+      if (!localPartnerName && fetchedMessages && fetchedMessages.length > 0) {
+        const { data: coupleSession } = await supabase
+          .from('couple_sessions')
+          .select('partner1_id, partner2_id')
+          .eq('session_id', sessionId)
+          .single();
 
-    console.log('Raw messages from database:', existingMessages);
+        if (coupleSession) {
+          // Also set the session creator ID if not already set
+          if (!sessionCreatorId) {
+            setSessionCreatorId(coupleSession.partner1_id);
+            console.log('Session creator ID set from loadMessages:', coupleSession.partner1_id);
+          }
 
-    // If we don't have a partner name, try to get it from the couple session
-    let localPartnerName = effectivePartnerName || partnerName;
-    if (!localPartnerName && existingMessages && existingMessages.length > 0) {
-      const { data: coupleSession } = await supabase
-        .from('couple_sessions')
-        .select('partner1_id, partner2_id')
-        .eq('session_id', sessionId)
-        .single();
+          const partnerId = coupleSession.partner1_id === userId 
+            ? coupleSession.partner2_id 
+            : coupleSession.partner1_id;
 
-      if (coupleSession) {
-        const partnerId = coupleSession.partner1_id === userId 
-          ? coupleSession.partner2_id 
-          : coupleSession.partner1_id;
+          if (partnerId) {
+            const { data: partnerProfile } = await supabase
+              .from('user_profiles')
+              .select('name')
+              .eq('id', partnerId)
+              .single();
 
-        if (partnerId) {
-          const { data: partnerProfile } = await supabase
-            .from('user_profiles')
-            .select('name')
-            .eq('id', partnerId)
-            .single();
-
-          if (partnerProfile && partnerProfile.name) {
-            localPartnerName = partnerProfile.name;
-            setEffectivePartnerName(partnerProfile.name);
-            console.log('Fetched partner name from database:', partnerProfile.name);
+            if (partnerProfile && partnerProfile.name) {
+              localPartnerName = partnerProfile.name;
+              setEffectivePartnerName(partnerProfile.name);
+              console.log('Fetched partner name from database:', partnerProfile.name);
+            }
           }
         }
       }
-    }
 
-    if (existingMessages) {
-      const formattedMessages = existingMessages.map(msg => {
-        let senderName = 'CouchTalk';
-        if (msg.sender_type === 'user') {
-          senderName = msg.sender_id === userId ? userName : (localPartnerName || 'Partner');
-        }
+      if (fetchedMessages) {
+        const formattedMessages = fetchedMessages.map((msg: any) => {
+          let senderName = 'CouchTalk';
+          if (msg.sender_type === 'user') {
+            senderName = msg.sender_id === userId ? userName : (localPartnerName || 'Partner');
+          }
+          
+          return {
+            ...msg,
+            sender_name: senderName
+          };
+        });
         
-        return {
-          ...msg,
-          sender_name: senderName
-        };
-      });
-      
-      console.log('Formatted messages:', formattedMessages);
-      setMessages(formattedMessages);
+        console.log('Formatted messages:', formattedMessages);
+        setMessages(formattedMessages);
+      }
+    } catch (error) {
+      console.error('Error loading messages:', error);
     }
   };
 
@@ -130,57 +157,113 @@ export function CouplesChatInterface({
   useEffect(() => {
     if (!isWaiting && !hasLoadedRef.current) {
       hasLoadedRef.current = true;
-      loadMessages();
+      
+      // Ensure user has encryption key
+      const ensureEncryption = async () => {
+        try {
+          await fetch('/api/ensure-encryption', { method: 'POST' });
+          console.log('Ensured encryption key for user');
+        } catch (error) {
+          console.error('Error ensuring encryption:', error);
+        }
+      };
+      
+      ensureEncryption().then(() => {
+        loadMessages();
+      });
     }
   }, [isWaiting]);
 
   // Create welcome message when both partners have joined
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const createWelcomeMessage = async () => {
-      if (isWaiting || hasCreatedWelcomeRef.current || !sessionId) return;
+      // Skip if waiting, already checked, or no session
+      if (isWaiting || welcomeMessageCheckRef.current || !sessionId) return;
       
-      // Check if welcome message already exists
-      const { data: existingMessages } = await supabase
-        .from('messages')
-        .select('id')
-        .eq('session_id', sessionId)
-        .eq('sender_type', 'ai')
-        .limit(1);
-
-      if (existingMessages && existingMessages.length > 0) {
-        console.log('Welcome message already exists');
-        return;
-      }
-
-      // Check if both partners have joined
-      const { data: coupleSession } = await supabase
-        .from('couple_sessions')
-        .select('partner1_id, partner2_id')
-        .eq('session_id', sessionId)
-        .single();
+      // Mark that we've started checking to prevent duplicate runs
+      welcomeMessageCheckRef.current = true;
       
-      if (coupleSession && coupleSession.partner2_id && coupleSession.partner1_id === userId) {
-        hasCreatedWelcomeRef.current = true;
-        console.log('Creating welcome message...');
+      try {
+        // Get couple session info
+        const { data: coupleSession } = await supabase
+          .from('couple_sessions')
+          .select('partner1_id, partner2_id')
+          .eq('session_id', sessionId)
+          .single();
         
-        const { error } = await supabase
-          .from('messages')
-          .insert({
-            session_id: sessionId,
-            sender_id: null,
-            sender_type: 'ai',
-            content: "Welcome to your couple's session! I'm here to help facilitate a meaningful conversation between you both. Remember to speak from your own experience using 'I feel' statements, and take turns listening to each other. What would you like to discuss today?"
-          });
-
-        if (error) {
-          console.error('Error creating welcome message:', error);
-          hasCreatedWelcomeRef.current = false;
-        } else {
-          console.log('Welcome message created successfully');
-          // Reload messages to show the welcome message
-          await loadMessages();
+        // Only partner1 should create the welcome message
+        if (!coupleSession || coupleSession.partner1_id !== userId) {
+          console.log('Not partner1, skipping welcome message creation');
+          return;
         }
+        
+        // Check if both partners have joined
+        if (!coupleSession.partner2_id) {
+          console.log('Partner2 not yet joined, skipping welcome message');
+          welcomeMessageCheckRef.current = false; // Reset so we can check again
+          return;
+        }
+        
+        // Double-check if welcome message already exists with a more robust query
+        const { data: existingMessages, error: checkError } = await supabase
+          .from('messages')
+          .select('id, sender_type, content')
+          .eq('session_id', sessionId)
+          .eq('sender_type', 'ai')
+          .order('created_at', { ascending: true })
+          .limit(1);
+
+        if (checkError) {
+          console.error('Error checking for existing welcome message:', checkError);
+          welcomeMessageCheckRef.current = false;
+          return;
+        }
+
+        if (existingMessages && existingMessages.length > 0) {
+          console.log('Welcome message already exists:', existingMessages[0]);
+          return;
+        }
+
+        // Add a small delay to handle any race conditions
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Final check before creating
+        const { data: finalCheck } = await supabase
+          .from('messages')
+          .select('id')
+          .eq('session_id', sessionId)
+          .eq('sender_type', 'ai')
+          .limit(1);
+          
+        if (finalCheck && finalCheck.length > 0) {
+          console.log('Welcome message created by other process');
+          return;
+        }
+        
+        console.log('Creating welcome message as partner1...');
+        
+        // Use the messages API to save with encryption
+        const response = await fetch('/api/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId,
+            userId: userId, // Current user ID, API will determine encryption user
+            content: "Welcome to your couple's session! I'm here to help facilitate a meaningful conversation between you both. Remember to speak from your own experience using 'I feel' statements, and take turns listening to each other. What would you like to discuss today?",
+            senderType: 'ai'
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to save welcome message');
+        }
+
+        console.log('Welcome message created successfully');
+        // Reload messages to show the welcome message
+        await loadMessages();
+      } catch (error) {
+        console.error('Error creating welcome message:', error);
+        welcomeMessageCheckRef.current = false; // Reset on error
       }
     };
 
@@ -188,7 +271,6 @@ export function CouplesChatInterface({
   }, [isWaiting, sessionId, userId, supabase]);
 
   // Set up real-time subscription and polling
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!sessionId) return;
 
@@ -215,8 +297,9 @@ export function CouplesChatInterface({
           console.log('Couple session update:', payload);
           if (payload.new.status === 'active' && isWaiting) {
             setIsWaiting(false);
-            // Force a page refresh to get partner info
-            window.location.reload();
+            // Instead of reloading, just reset the check and load messages
+            welcomeMessageCheckRef.current = false;
+            loadMessages();
           }
         }
       )
@@ -246,9 +329,7 @@ export function CouplesChatInterface({
   }, [sessionId, isWaiting]);
 
   // Auto-scroll
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    // ScrollArea component has a viewport child that actually scrolls
     const scrollElement = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
     if (scrollElement) {
       scrollElement.scrollTop = scrollElement.scrollHeight;
@@ -259,30 +340,50 @@ export function CouplesChatInterface({
     e.preventDefault();
     if (!input.trim() || isLoading || isWaiting) return;
 
+    // Get session creator ID if not already set
+    if (!sessionCreatorId) {
+      const { data: coupleSession } = await supabase
+        .from('couple_sessions')
+        .select('partner1_id')
+        .eq('session_id', sessionId)
+        .single();
+      
+      if (coupleSession && coupleSession.partner1_id) {
+        setSessionCreatorId(coupleSession.partner1_id);
+      }
+    }
+
     const userMessage = input.trim();
     setInput('');
     setIsLoading(true);
 
     try {
       console.log('Sending message:', userMessage);
-      console.log('Session ID for message:', sessionId);
+      console.log('Session ID:', sessionId);
+      console.log('Session creator ID:', sessionCreatorId);
+      console.log('Current user ID:', userId);
       
-      // Save user message to database
-      const { error: saveError } = await supabase
-        .from('messages')
-        .insert({
-          session_id: sessionId,
-          sender_id: userId,
-          sender_type: 'user',
-          content: userMessage
-        });
+      // Save user message via API
+      const saveResponse = await fetch('/api/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId,
+          userId: userId,  // Pass current user ID, API will determine encryption user
+          content: userMessage,
+          senderType: 'user',
+          actualSenderId: userId  // Track who actually sent it
+        }),
+      });
 
-      if (saveError) {
-        console.error('Error saving user message:', saveError);
-        throw saveError;
+      if (!saveResponse.ok) {
+        throw new Error('Failed to save message');
       }
 
       console.log('User message saved successfully');
+      
+      // Reload messages to show the new message
+      await loadMessages();
       
       // Format messages for API
       const apiMessages = messages
@@ -300,7 +401,9 @@ export function CouplesChatInterface({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: apiMessages,
-          mode: 'couple'
+          mode: 'couple',
+          sessionId,
+          userId: userId  // Pass current user ID, API will determine encryption user
         }),
       });
 
@@ -337,24 +440,33 @@ export function CouplesChatInterface({
           ));
         }
         
-        // Remove temporary AI message
-        setMessages(prev => prev.filter(msg => msg.id !== tempAiMessageId));
-        
-        // Save AI message to database
-        const { error: aiError } = await supabase
-          .from('messages')
-          .insert({
-            session_id: sessionId,
-            sender_id: null,
-            sender_type: 'ai',
-            content: assistantMessage
+        console.log('AI streaming complete. Full message:', assistantMessage);
+        console.log('About to save AI message from client...');
+
+        // Save the AI message since server-side save might have timing issues
+        try {
+          const saveAIResponse = await fetch('/api/messages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              sessionId,
+              userId: userId, // Current user ID, API will determine encryption user
+              content: assistantMessage,
+              senderType: 'ai'
+            }),
           });
 
-        if (aiError) {
-          console.error('Error saving AI message:', aiError);
-        } else {
-          console.log('AI message saved successfully');
+          if (!saveAIResponse.ok) {
+            console.error('Failed to save AI message');
+          } else {
+            console.log('AI message saved successfully from client');
+          }
+        } catch (error) {
+          console.error('Error saving AI message:', error);
         }
+
+        // Reload messages to show the saved AI response
+        await loadMessages();
       }
     } catch (error) {
       console.error('Error in handleSubmit:', error);

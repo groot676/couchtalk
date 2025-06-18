@@ -4,7 +4,7 @@ const nextConfig = {
   // This prevents static generation at build time
   experimental: {
     // Ensure we're using the app directory
-    appDir: true,
+    
   },
   
   // Disable static generation for all pages
