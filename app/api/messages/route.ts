@@ -58,6 +58,7 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const sessionId = searchParams.get('sessionId');
     const userId = searchParams.get('userId');
+    const messageIds = searchParams.get('messageIds');
 
     if (!sessionId || !userId) {
       return NextResponse.json(
@@ -68,12 +69,22 @@ export async function GET(request: NextRequest) {
 
     const supabase = await createClient();
     
-    // Get all messages for the session
-    const { data: messages, error } = await supabase
+    // Build query
+    let query = supabase
       .from('messages')
       .select('*')
       .eq('session_id', sessionId)
       .order('created_at', { ascending: true });
+    
+    // If specific message IDs are requested, filter by them
+    if (messageIds) {
+      const idArray = messageIds.split(',').filter(id => id.trim());
+      if (idArray.length > 0) {
+        query = query.in('id', idArray);
+      }
+    }
+    
+    const { data: messages, error } = await query;
 
     if (error) {
       console.error('Error fetching messages:', error);

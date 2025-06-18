@@ -61,7 +61,8 @@ export async function encryptMessageContent(
  */
 export async function decryptMessageContent(
   userId: string,
-  message: EncryptedMessage
+  message: EncryptedMessage,
+  userKey?: Buffer | null
 ): Promise<string> {
   // If not encrypted, return as is
   if (message.encryption_type === 'none' || !message.encrypted_content) {
@@ -75,15 +76,16 @@ export async function decryptMessageContent(
   
   // Handle hybrid encryption
   if (message.encryption_type === 'hybrid') {
-    const userKey = await getUserEncryptionKey(userId);
-    if (!userKey) {
+    // Use provided key or fetch it
+    const key = userKey || await getUserEncryptionKey(userId);
+    if (!key) {
       console.error(`No encryption key found for user ${userId}`);
       return '[Message encrypted - key not found]';
     }
     
     try {
       const { encrypted, iv, tag } = unpackEncryptedData(message.encrypted_content);
-      return decryptMessage(encrypted, userKey, iv, tag);
+      return decryptMessage(encrypted, key, iv, tag);
     } catch (error) {
       console.error('Error decrypting message:', error);
       return '[Message encrypted - decryption failed]';
@@ -94,37 +96,41 @@ export async function decryptMessageContent(
 }
 
 /**
- * Processes messages for a session, decrypting as needed
+ * Processes messages for a session, decrypting as needed with parallel processing
  */
 export async function processMessagesForUser(
   userId: string,
   messages: ProcessedMessage[]
 ): Promise<ProcessedMessage[]> {
-  const processedMessages = [];
+  // Get user key once for all messages
+  const userKey = await getUserEncryptionKey(userId);
   
-  for (const message of messages) {
+  // Process messages in parallel for better performance
+  const decryptionPromises = messages.map(async (message) => {
     if (message.encryption_type === 'none') {
-      processedMessages.push(message);
+      return message;
     } else if (message.encryption_type === 'hybrid') {
       // Decrypt hybrid encrypted messages
-      const decryptedContent = await decryptMessageContent(userId, message);
-      processedMessages.push({
+      const decryptedContent = await decryptMessageContent(userId, message, userKey);
+      return {
         ...message,
         content: decryptedContent,
         // Don't send encrypted content to client
         encrypted_content: undefined
-      });
+      };
     } else if (message.encryption_type === 'e2ee') {
       // For E2EE, send encrypted content as is (client will decrypt)
-      processedMessages.push({
+      return {
         ...message,
         content: message.encrypted_content,
         encrypted_content: undefined
-      });
+      };
     }
-  }
+    return message;
+  });
   
-  return processedMessages;
+  // Wait for all decryptions to complete
+  return Promise.all(decryptionPromises);
 }
 
 /**

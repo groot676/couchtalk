@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -44,6 +44,9 @@ export function CouplesChatInterface({
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const hasLoadedRef = useRef(false);
   const welcomeMessageCheckRef = useRef(false);
+  const lastMessageIdRef = useRef<string | null>(null);
+  const messageIdsRef = useRef<Set<string>>(new Set());
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   console.log('CouplesChatInterface initialized with:', {
     sessionId,
@@ -74,19 +77,152 @@ export function CouplesChatInterface({
     getSessionCreatorId();
   }, [sessionId, sessionCreatorId, supabase]);
 
-  // Function to load messages
-  const loadMessages = async () => {
+  // Function to load only new messages
+  const loadNewMessages = useCallback(async () => {
+    if (!sessionId) return;
+    
+    console.log('Checking for new messages after:', lastMessageIdRef.current);
+    
+    try {
+      // Build query for new messages only
+      let query = supabase
+        .from('messages')
+        .select('*')
+        .eq('session_id', sessionId)
+        .order('created_at', { ascending: true });
+      
+      // If we have a last message ID, only get messages after that
+      if (lastMessageIdRef.current) {
+        const lastMessage = messages.find(m => m.id === lastMessageIdRef.current);
+        if (lastMessage) {
+          query = query.gt('created_at', lastMessage.created_at);
+        }
+      }
+      
+      const { data: newMessages, error } = await query;
+      
+      if (error) {
+        console.error('Error fetching new messages:', error);
+        return;
+      }
+      
+      if (!newMessages || newMessages.length === 0) {
+        console.log('No new messages found');
+        return;
+      }
+      
+      console.log(`Found ${newMessages.length} new messages`);
+      
+      // Decrypt only the new messages
+      const response = await fetch(`/api/messages?sessionId=${sessionId}&userId=${userId}&messageIds=${newMessages.map(m => m.id).join(',')}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch messages');
+      }
+      
+      const { messages: decryptedNewMessages } = await response.json();
+      
+      // Get partner name if we don't have it yet
+      let localPartnerName = effectivePartnerName || partnerName;
+      if (!localPartnerName && messages.length === 0) {
+        const { data: coupleSession } = await supabase
+          .from('couple_sessions')
+          .select('partner1_id, partner2_id')
+          .eq('session_id', sessionId)
+          .single();
+
+        if (coupleSession) {
+          const partnerId = coupleSession.partner1_id === userId 
+            ? coupleSession.partner2_id 
+            : coupleSession.partner1_id;
+
+          if (partnerId) {
+            const { data: partnerProfile } = await supabase
+              .from('user_profiles')
+              .select('name')
+              .eq('id', partnerId)
+              .single();
+
+            if (partnerProfile?.name) {
+              localPartnerName = partnerProfile.name;
+              setEffectivePartnerName(partnerProfile.name);
+            }
+          }
+        }
+      }
+      
+      // Format and add only truly new messages
+      const formattedNewMessages = decryptedNewMessages
+        .filter((msg: any) => !messageIdsRef.current.has(msg.id))
+        .map((msg: any) => {
+          let senderName = 'CouchTalk';
+          if (msg.sender_type === 'user') {
+            senderName = msg.sender_id === userId ? userName : (localPartnerName || 'Partner');
+          }
+          
+          messageIdsRef.current.add(msg.id);
+          return {
+            ...msg,
+            sender_name: senderName
+          };
+        });
+      
+      if (formattedNewMessages.length > 0) {
+        setMessages(prev => {
+          // Create a map of existing messages by content and sender for deduplication
+          const existingMessages = new Map();
+          prev.forEach(msg => {
+            const key = `${msg.content}-${msg.sender_type}-${msg.sender_id || 'ai'}`;
+            existingMessages.set(key, msg);
+          });
+          
+          // Filter out any new messages that duplicate optimistic/temp messages
+          const trulyNewMessages = formattedNewMessages.filter((newMsg: any) => {
+            const key = `${newMsg.content}-${newMsg.sender_type}-${newMsg.sender_id || 'ai'}`;
+            const existing = existingMessages.get(key);
+            
+            // If there's an existing message with same content, check if it's optimistic
+            if (existing && (existing.id.startsWith('optimistic-') || existing.id.startsWith('temp-'))) {
+              // Replace the optimistic/temp message with the real one
+              return true;
+            }
+            
+            // Otherwise, only add if it doesn't exist
+            return !existing;
+          });
+          
+          // Remove optimistic/temp messages that now have real counterparts
+          const filteredPrev = prev.filter(msg => {
+            if (msg.id.startsWith('optimistic-') || msg.id.startsWith('temp-')) {
+              const key = `${msg.content}-${msg.sender_type}-${msg.sender_id || 'ai'}`;
+              const hasRealVersion = trulyNewMessages.some((newMsg: any) => 
+                `${newMsg.content}-${newMsg.sender_type}-${newMsg.sender_id || 'ai'}` === key
+              );
+              return !hasRealVersion;
+            }
+            return true;
+          });
+          
+          return [...filteredPrev, ...trulyNewMessages];
+        });
+        
+        // Update last message ID
+        const lastNewMessage = formattedNewMessages[formattedNewMessages.length - 1];
+        lastMessageIdRef.current = lastNewMessage.id;
+      }
+    } catch (error) {
+      console.error('Error loading new messages:', error);
+    }
+  }, [sessionId, userId, messages, effectivePartnerName, partnerName, userName, supabase]);
+
+  // Function to load all messages (used only for initial load)
+  const loadAllMessages = async () => {
     if (!sessionId) {
       console.error('No session ID provided');
       return;
     }
     
-    console.log('Loading messages for session:', sessionId);
-    console.log('Current userId:', userId);
-    console.log('Current userName:', userName);
-    console.log('Current partnerName:', partnerName);
+    console.log('Loading all messages for session:', sessionId);
     
-    // Get messages using the API to ensure proper decryption
     try {
       const response = await fetch(`/api/messages?sessionId=${sessionId}&userId=${userId}`);
       if (!response.ok) {
@@ -96,7 +232,7 @@ export function CouplesChatInterface({
       const { messages: fetchedMessages } = await response.json();
       console.log('Messages from API:', fetchedMessages);
 
-      // If we don't have a partner name, try to get it from the couple session
+      // Get partner name if we don't have it
       let localPartnerName = effectivePartnerName || partnerName;
       if (!localPartnerName && fetchedMessages && fetchedMessages.length > 0) {
         const { data: coupleSession } = await supabase
@@ -106,10 +242,8 @@ export function CouplesChatInterface({
           .single();
 
         if (coupleSession) {
-          // Also set the session creator ID if not already set
           if (!sessionCreatorId) {
             setSessionCreatorId(coupleSession.partner1_id);
-            console.log('Session creator ID set from loadMessages:', coupleSession.partner1_id);
           }
 
           const partnerId = coupleSession.partner1_id === userId 
@@ -123,22 +257,25 @@ export function CouplesChatInterface({
               .eq('id', partnerId)
               .single();
 
-            if (partnerProfile && partnerProfile.name) {
+            if (partnerProfile?.name) {
               localPartnerName = partnerProfile.name;
               setEffectivePartnerName(partnerProfile.name);
-              console.log('Fetched partner name from database:', partnerProfile.name);
             }
           }
         }
       }
 
       if (fetchedMessages) {
+        // Clear existing tracking
+        messageIdsRef.current.clear();
+        
         const formattedMessages = fetchedMessages.map((msg: any) => {
           let senderName = 'CouchTalk';
           if (msg.sender_type === 'user') {
             senderName = msg.sender_id === userId ? userName : (localPartnerName || 'Partner');
           }
           
+          messageIdsRef.current.add(msg.id);
           return {
             ...msg,
             sender_name: senderName
@@ -147,6 +284,11 @@ export function CouplesChatInterface({
         
         console.log('Formatted messages:', formattedMessages);
         setMessages(formattedMessages);
+        
+        // Set last message ID
+        if (formattedMessages.length > 0) {
+          lastMessageIdRef.current = formattedMessages[formattedMessages.length - 1].id;
+        }
       }
     } catch (error) {
       console.error('Error loading messages:', error);
@@ -158,7 +300,6 @@ export function CouplesChatInterface({
     if (!isWaiting && !hasLoadedRef.current) {
       hasLoadedRef.current = true;
       
-      // Ensure user has encryption key
       const ensureEncryption = async () => {
         try {
           await fetch('/api/ensure-encryption', { method: 'POST' });
@@ -169,7 +310,7 @@ export function CouplesChatInterface({
       };
       
       ensureEncryption().then(() => {
-        loadMessages();
+        loadAllMessages();
       });
     }
   }, [isWaiting]);
@@ -177,57 +318,42 @@ export function CouplesChatInterface({
   // Create welcome message when both partners have joined
   useEffect(() => {
     const createWelcomeMessage = async () => {
-      // Skip if waiting, already checked, or no session
       if (isWaiting || welcomeMessageCheckRef.current || !sessionId) return;
       
-      // Mark that we've started checking to prevent duplicate runs
       welcomeMessageCheckRef.current = true;
       
       try {
-        // Get couple session info
         const { data: coupleSession } = await supabase
           .from('couple_sessions')
           .select('partner1_id, partner2_id')
           .eq('session_id', sessionId)
           .single();
         
-        // Only partner1 should create the welcome message
         if (!coupleSession || coupleSession.partner1_id !== userId) {
           console.log('Not partner1, skipping welcome message creation');
           return;
         }
         
-        // Check if both partners have joined
         if (!coupleSession.partner2_id) {
           console.log('Partner2 not yet joined, skipping welcome message');
-          welcomeMessageCheckRef.current = false; // Reset so we can check again
-          return;
-        }
-        
-        // Double-check if welcome message already exists with a more robust query
-        const { data: existingMessages, error: checkError } = await supabase
-          .from('messages')
-          .select('id, sender_type, content')
-          .eq('session_id', sessionId)
-          .eq('sender_type', 'ai')
-          .order('created_at', { ascending: true })
-          .limit(1);
-
-        if (checkError) {
-          console.error('Error checking for existing welcome message:', checkError);
           welcomeMessageCheckRef.current = false;
           return;
         }
+        
+        const { data: existingMessages } = await supabase
+          .from('messages')
+          .select('id')
+          .eq('session_id', sessionId)
+          .eq('sender_type', 'ai')
+          .limit(1);
 
         if (existingMessages && existingMessages.length > 0) {
-          console.log('Welcome message already exists:', existingMessages[0]);
+          console.log('Welcome message already exists');
           return;
         }
 
-        // Add a small delay to handle any race conditions
         await new Promise(resolve => setTimeout(resolve, 1000));
         
-        // Final check before creating
         const { data: finalCheck } = await supabase
           .from('messages')
           .select('id')
@@ -242,13 +368,12 @@ export function CouplesChatInterface({
         
         console.log('Creating welcome message as partner1...');
         
-        // Use the messages API to save with encryption
         const response = await fetch('/api/messages', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             sessionId,
-            userId: userId, // Current user ID, API will determine encryption user
+            userId: userId,
             content: "Welcome to your couple's session! I'm here to help facilitate a meaningful conversation between you both. Remember to speak from your own experience using 'I feel' statements, and take turns listening to each other. What would you like to discuss today?",
             senderType: 'ai'
           }),
@@ -259,28 +384,48 @@ export function CouplesChatInterface({
         }
 
         console.log('Welcome message created successfully');
-        // Reload messages to show the welcome message
-        await loadMessages();
+        // Load only the new message
+        await loadNewMessages();
       } catch (error) {
         console.error('Error creating welcome message:', error);
-        welcomeMessageCheckRef.current = false; // Reset on error
+        welcomeMessageCheckRef.current = false;
       }
     };
 
     createWelcomeMessage();
-  }, [isWaiting, sessionId, userId, supabase]);
+  }, [isWaiting, sessionId, userId, supabase, loadNewMessages]);
 
-  // Set up real-time subscription and polling
+  // Set up real-time subscription and smart polling
   useEffect(() => {
     if (!sessionId) return;
 
     console.log('Setting up realtime subscription for session:', sessionId);
 
-    // Set up polling as fallback - more frequent initially
-    const pollInterval = setInterval(() => {
-      console.log('Polling for new messages...');
-      loadMessages();
-    }, 2000); // Poll every 2 seconds
+    // Smart polling - starts fast, then slows down
+    let pollDelay = 2000; // Start with 2 seconds
+    const maxPollDelay = 10000; // Max 10 seconds
+    
+    const startPolling = () => {
+      if (pollIntervalRef.current) {
+        clearTimeout(pollIntervalRef.current);
+      }
+      
+      const poll = () => {
+        console.log(`Polling with ${pollDelay}ms delay`);
+        loadNewMessages();
+        
+        // Gradually increase delay up to max
+        if (pollDelay < maxPollDelay) {
+          pollDelay = Math.min(pollDelay * 1.5, maxPollDelay);
+        }
+        
+        pollIntervalRef.current = setTimeout(poll, pollDelay);
+      };
+      
+      pollIntervalRef.current = setTimeout(poll, pollDelay);
+    };
+    
+    startPolling();
 
     // Set up realtime subscription
     const channel = supabase
@@ -297,9 +442,8 @@ export function CouplesChatInterface({
           console.log('Couple session update:', payload);
           if (payload.new.status === 'active' && isWaiting) {
             setIsWaiting(false);
-            // Instead of reloading, just reset the check and load messages
             welcomeMessageCheckRef.current = false;
-            loadMessages();
+            loadAllMessages();
           }
         }
       )
@@ -313,8 +457,10 @@ export function CouplesChatInterface({
         },
         (payload) => {
           console.log('New message via realtime:', payload);
-          // Just reload all messages to ensure consistency
-          loadMessages();
+          // Reset polling delay when new activity detected
+          pollDelay = 2000;
+          startPolling();
+          loadNewMessages();
         }
       )
       .subscribe((status) => {
@@ -323,10 +469,12 @@ export function CouplesChatInterface({
 
     return () => {
       console.log('Cleaning up subscriptions');
-      clearInterval(pollInterval);
+      if (pollIntervalRef.current) {
+        clearTimeout(pollIntervalRef.current);
+      }
       channel.unsubscribe();
     };
-  }, [sessionId, isWaiting]);
+  }, [sessionId, isWaiting, loadNewMessages]);
 
   // Auto-scroll
   useEffect(() => {
@@ -340,7 +488,6 @@ export function CouplesChatInterface({
     e.preventDefault();
     if (!input.trim() || isLoading || isWaiting) return;
 
-    // Get session creator ID if not already set
     if (!sessionCreatorId) {
       const { data: coupleSession } = await supabase
         .from('couple_sessions')
@@ -348,7 +495,7 @@ export function CouplesChatInterface({
         .eq('session_id', sessionId)
         .single();
       
-      if (coupleSession && coupleSession.partner1_id) {
+      if (coupleSession?.partner1_id) {
         setSessionCreatorId(coupleSession.partner1_id);
       }
     }
@@ -357,11 +504,20 @@ export function CouplesChatInterface({
     setInput('');
     setIsLoading(true);
 
+    // Add optimistic message immediately
+    const optimisticMessageId = `optimistic-${Date.now()}`;
+    const optimisticMessage: Message = {
+      id: optimisticMessageId,
+      content: userMessage,
+      sender_type: 'user',
+      sender_id: userId,
+      created_at: new Date().toISOString(),
+      sender_name: userName
+    };
+    setMessages(prev => [...prev, optimisticMessage]);
+
     try {
       console.log('Sending message:', userMessage);
-      console.log('Session ID:', sessionId);
-      console.log('Session creator ID:', sessionCreatorId);
-      console.log('Current user ID:', userId);
       
       // Save user message via API
       const saveResponse = await fetch('/api/messages', {
@@ -369,10 +525,10 @@ export function CouplesChatInterface({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sessionId,
-          userId: userId,  // Pass current user ID, API will determine encryption user
+          userId: userId,
           content: userMessage,
           senderType: 'user',
-          actualSenderId: userId  // Track who actually sent it
+          actualSenderId: userId
         }),
       });
 
@@ -382,11 +538,28 @@ export function CouplesChatInterface({
 
       console.log('User message saved successfully');
       
-      // Reload messages to show the new message
-      await loadMessages();
+      // Load new messages first
+      await loadNewMessages();
+      
+      // Then remove optimistic message only if the real one was loaded
+      setMessages(prev => {
+        // Check if we have the real message
+        const hasRealMessage = prev.some(m => 
+          m.content === userMessage && 
+          m.sender_id === userId && 
+          m.id !== optimisticMessageId
+        );
+        
+        if (hasRealMessage) {
+          return prev.filter(m => m.id !== optimisticMessageId);
+        }
+        // Keep optimistic message if real one hasn't loaded yet
+        return prev;
+      });
       
       // Format messages for API
       const apiMessages = messages
+        .filter(m => m.id !== optimisticMessageId)
         .map(m => ({
           role: m.sender_type === 'ai' ? 'assistant' : 'user',
           content: m.sender_type === 'ai' ? m.content : `${m.sender_name}: ${m.content}`
@@ -403,7 +576,7 @@ export function CouplesChatInterface({
           messages: apiMessages,
           mode: 'couple',
           sessionId,
-          userId: userId  // Pass current user ID, API will determine encryption user
+          userId: userId
         }),
       });
 
@@ -443,14 +616,14 @@ export function CouplesChatInterface({
         console.log('AI streaming complete. Full message:', assistantMessage);
         console.log('About to save AI message from client...');
 
-        // Save the AI message since server-side save might have timing issues
+        // Save the AI message
         try {
           const saveAIResponse = await fetch('/api/messages', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               sessionId,
-              userId: userId, // Current user ID, API will determine encryption user
+              userId: userId,
               content: assistantMessage,
               senderType: 'ai'
             }),
@@ -465,11 +638,30 @@ export function CouplesChatInterface({
           console.error('Error saving AI message:', error);
         }
 
-        // Reload messages to show the saved AI response
-        await loadMessages();
+        // Load new messages first
+        await loadNewMessages();
+        
+        // Then remove temp message only if the real AI message was loaded
+        setMessages(prev => {
+          // Check if we have the real AI message
+          const hasRealAIMessage = prev.some(m => 
+            m.content === assistantMessage && 
+            m.sender_type === 'ai' && 
+            m.id !== tempAiMessageId
+          );
+          
+          if (hasRealAIMessage) {
+            return prev.filter(m => m.id !== tempAiMessageId);
+          }
+          // Keep temp message if real one hasn't loaded yet
+          return prev;
+        });
       }
     } catch (error) {
       console.error('Error in handleSubmit:', error);
+      
+      // Remove optimistic message on error
+      setMessages(prev => prev.filter(m => m.id !== optimisticMessageId));
       
       // Show error message
       const errorMessage: Message = {
@@ -547,9 +739,9 @@ export function CouplesChatInterface({
           </div>
           <div className="flex items-center gap-4">
             <button
-              onClick={() => loadMessages()}
+              onClick={() => loadNewMessages()}
               className="text-white/60 hover:text-white transition-colors"
-              title="Refresh messages"
+              title="Check for new messages"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
