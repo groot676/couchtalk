@@ -1,4 +1,6 @@
 import { CouplesChatInterface } from '@/app/couple/chat/[sessionId]/CouplesChatInterface';
+import { Header } from '@/components/ui/Header';
+import { AtmosphereEffects } from '@/components/ui/AtmosphereEffects';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 export const dynamic = 'force-dynamic';
@@ -40,20 +42,12 @@ export default async function CoupleChatPage({ params }: PageProps) {
     redirect('/couple/start');
   }
 
-  // Debug log
-  console.log('Couple session data:', coupleSession);
-  console.log('Current user ID:', user.id);
-  console.log('Partner1 ID:', coupleSession.partner1_id);
-  console.log('Partner2 ID:', coupleSession.partner2_id);
-
   // Get partner info if they've joined
   let partnerProfile = null;
   if (coupleSession.partner2_id && coupleSession.partner1_id) {
     const partnerId = coupleSession.partner1_id === user.id 
       ? coupleSession.partner2_id 
       : coupleSession.partner1_id;
-    
-    console.log('Partner ID to fetch:', partnerId);
     
     if (partnerId) {
       const { data, error } = await supabase
@@ -62,27 +56,66 @@ export default async function CoupleChatPage({ params }: PageProps) {
         .eq('id', partnerId)
         .single();
       
-      if (error) {
-        console.error('Error fetching partner profile:', error);
-      } else {
-        console.log('Partner profile:', data);
+      if (!error) {
         partnerProfile = data;
       }
     }
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100">
-      <div className="container mx-auto px-4 py-8">
-        <CouplesChatInterface 
-          sessionId={coupleSession.session_id}
-          sessionCode={coupleSession.session_code}
-          userId={user.id}
-          userName={profile?.name || 'You'}
-          partnerName={partnerProfile?.name}
-          isWaiting={coupleSession.status === 'waiting'}
-        />
+    <>
+      <AtmosphereEffects />
+      
+      <div style={{ position: 'relative', minHeight: '100vh', display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
+        {/* Header */}
+        <div style={{ position: 'relative', zIndex: 10, flexShrink: 0 }}>
+          <Header userName={profile?.name || 'Friend'} />
+        </div>
+
+        <main style={{ 
+          position: 'relative',
+          zIndex: 10,
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          padding: '24px',
+          maxWidth: '1200px',
+          width: '100%',
+          margin: '0 auto',
+          overflow: 'hidden',
+        }}>
+          <div style={{ marginBottom: '24px', textAlign: 'center', flexShrink: 0 }}>
+            <h1 style={{
+              fontSize: '42px',
+              fontFamily: 'Crimson Text, serif',
+              fontWeight: '400',
+              color: '#FAFAF8',
+              marginBottom: '8px',
+              textShadow: '2px 2px 6px rgba(0,0,0,0.5)',
+            }}>
+              Your shared <span style={{ color: '#FFD6A5', fontStyle: 'italic' }}>sanctuary</span>
+            </h1>
+            <p style={{
+              fontSize: '16px',
+              color: 'rgba(255, 255, 255, 0.8)',
+              fontWeight: '300',
+            }}>
+              A safe space for meaningful conversations together
+            </p>
+          </div>
+          
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+            <CouplesChatInterface 
+              sessionId={coupleSession.session_id}
+              sessionCode={coupleSession.session_code}
+              userId={user.id}
+              userName={profile?.name || 'You'}
+              partnerName={partnerProfile?.name}
+              isWaiting={coupleSession.status === 'waiting'}
+            />
+          </div>
+        </main>
       </div>
-    </main>
+    </>
   );
 }

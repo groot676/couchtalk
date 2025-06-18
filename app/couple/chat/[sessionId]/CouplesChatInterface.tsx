@@ -1,9 +1,6 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Send, Loader2, Users, Copy, Check, Heart } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
@@ -48,15 +45,7 @@ export function CouplesChatInterface({
   const messageIdsRef = useRef<Set<string>>(new Set());
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  console.log('CouplesChatInterface initialized with:', {
-    sessionId,
-    sessionCode,
-    userId,
-    userName,
-    partnerName,
-    isWaiting: initialWaiting
-  });
-
+  // [Keep all the existing hooks and functions - they remain the same]
   // Get session creator ID immediately
   useEffect(() => {
     const getSessionCreatorId = async () => {
@@ -70,7 +59,6 @@ export function CouplesChatInterface({
       
       if (coupleSession && coupleSession.partner1_id) {
         setSessionCreatorId(coupleSession.partner1_id);
-        console.log('Session creator ID set:', coupleSession.partner1_id);
       }
     };
     
@@ -81,17 +69,13 @@ export function CouplesChatInterface({
   const loadNewMessages = useCallback(async () => {
     if (!sessionId) return;
     
-    console.log('Checking for new messages after:', lastMessageIdRef.current);
-    
     try {
-      // Build query for new messages only
       let query = supabase
         .from('messages')
         .select('*')
         .eq('session_id', sessionId)
         .order('created_at', { ascending: true });
       
-      // If we have a last message ID, only get messages after that
       if (lastMessageIdRef.current) {
         const lastMessage = messages.find(m => m.id === lastMessageIdRef.current);
         if (lastMessage) {
@@ -107,13 +91,9 @@ export function CouplesChatInterface({
       }
       
       if (!newMessages || newMessages.length === 0) {
-        console.log('No new messages found');
         return;
       }
       
-      console.log(`Found ${newMessages.length} new messages`);
-      
-      // Decrypt only the new messages
       const response = await fetch(`/api/messages?sessionId=${sessionId}&userId=${userId}&messageIds=${newMessages.map(m => m.id).join(',')}`);
       if (!response.ok) {
         throw new Error('Failed to fetch messages');
@@ -121,7 +101,6 @@ export function CouplesChatInterface({
       
       const { messages: decryptedNewMessages } = await response.json();
       
-      // Get partner name if we don't have it yet
       let localPartnerName = effectivePartnerName || partnerName;
       if (!localPartnerName && messages.length === 0) {
         const { data: coupleSession } = await supabase
@@ -150,7 +129,6 @@ export function CouplesChatInterface({
         }
       }
       
-      // Format and add only truly new messages
       const formattedNewMessages = decryptedNewMessages
         .filter((msg: any) => !messageIdsRef.current.has(msg.id))
         .map((msg: any) => {
@@ -168,29 +146,23 @@ export function CouplesChatInterface({
       
       if (formattedNewMessages.length > 0) {
         setMessages(prev => {
-          // Create a map of existing messages by content and sender for deduplication
           const existingMessages = new Map();
           prev.forEach(msg => {
             const key = `${msg.content}-${msg.sender_type}-${msg.sender_id || 'ai'}`;
             existingMessages.set(key, msg);
           });
           
-          // Filter out any new messages that duplicate optimistic/temp messages
           const trulyNewMessages = formattedNewMessages.filter((newMsg: any) => {
             const key = `${newMsg.content}-${newMsg.sender_type}-${newMsg.sender_id || 'ai'}`;
             const existing = existingMessages.get(key);
             
-            // If there's an existing message with same content, check if it's optimistic
             if (existing && (existing.id.startsWith('optimistic-') || existing.id.startsWith('temp-'))) {
-              // Replace the optimistic/temp message with the real one
               return true;
             }
             
-            // Otherwise, only add if it doesn't exist
             return !existing;
           });
           
-          // Remove optimistic/temp messages that now have real counterparts
           const filteredPrev = prev.filter(msg => {
             if (msg.id.startsWith('optimistic-') || msg.id.startsWith('temp-')) {
               const key = `${msg.content}-${msg.sender_type}-${msg.sender_id || 'ai'}`;
@@ -205,7 +177,6 @@ export function CouplesChatInterface({
           return [...filteredPrev, ...trulyNewMessages];
         });
         
-        // Update last message ID
         const lastNewMessage = formattedNewMessages[formattedNewMessages.length - 1];
         lastMessageIdRef.current = lastNewMessage.id;
       }
@@ -217,11 +188,8 @@ export function CouplesChatInterface({
   // Function to load all messages (used only for initial load)
   const loadAllMessages = async () => {
     if (!sessionId) {
-      console.error('No session ID provided');
       return;
     }
-    
-    console.log('Loading all messages for session:', sessionId);
     
     try {
       const response = await fetch(`/api/messages?sessionId=${sessionId}&userId=${userId}`);
@@ -230,9 +198,7 @@ export function CouplesChatInterface({
       }
       
       const { messages: fetchedMessages } = await response.json();
-      console.log('Messages from API:', fetchedMessages);
 
-      // Get partner name if we don't have it
       let localPartnerName = effectivePartnerName || partnerName;
       if (!localPartnerName && fetchedMessages && fetchedMessages.length > 0) {
         const { data: coupleSession } = await supabase
@@ -266,7 +232,6 @@ export function CouplesChatInterface({
       }
 
       if (fetchedMessages) {
-        // Clear existing tracking
         messageIdsRef.current.clear();
         
         const formattedMessages = fetchedMessages.map((msg: any) => {
@@ -282,10 +247,8 @@ export function CouplesChatInterface({
           };
         });
         
-        console.log('Formatted messages:', formattedMessages);
         setMessages(formattedMessages);
         
-        // Set last message ID
         if (formattedMessages.length > 0) {
           lastMessageIdRef.current = formattedMessages[formattedMessages.length - 1].id;
         }
@@ -303,7 +266,6 @@ export function CouplesChatInterface({
       const ensureEncryption = async () => {
         try {
           await fetch('/api/ensure-encryption', { method: 'POST' });
-          console.log('Ensured encryption key for user');
         } catch (error) {
           console.error('Error ensuring encryption:', error);
         }
@@ -330,12 +292,10 @@ export function CouplesChatInterface({
           .single();
         
         if (!coupleSession || coupleSession.partner1_id !== userId) {
-          console.log('Not partner1, skipping welcome message creation');
           return;
         }
         
         if (!coupleSession.partner2_id) {
-          console.log('Partner2 not yet joined, skipping welcome message');
           welcomeMessageCheckRef.current = false;
           return;
         }
@@ -348,7 +308,6 @@ export function CouplesChatInterface({
           .limit(1);
 
         if (existingMessages && existingMessages.length > 0) {
-          console.log('Welcome message already exists');
           return;
         }
 
@@ -362,11 +321,8 @@ export function CouplesChatInterface({
           .limit(1);
           
         if (finalCheck && finalCheck.length > 0) {
-          console.log('Welcome message created by other process');
           return;
         }
-        
-        console.log('Creating welcome message as partner1...');
         
         const response = await fetch('/api/messages', {
           method: 'POST',
@@ -374,7 +330,7 @@ export function CouplesChatInterface({
           body: JSON.stringify({
             sessionId,
             userId: userId,
-            content: "Welcome to your couple's session! I'm here to help facilitate a meaningful conversation between you both. Remember to speak from your own experience using 'I feel' statements, and take turns listening to each other. What would you like to discuss today?",
+            content: "Welcome to your couple's sanctuary! I'm here to help facilitate a meaningful conversation between you both. Remember to speak from your own experience using 'I feel' statements, and take turns listening to each other. What would you like to discuss today?",
             senderType: 'ai'
           }),
         });
@@ -383,8 +339,6 @@ export function CouplesChatInterface({
           throw new Error('Failed to save welcome message');
         }
 
-        console.log('Welcome message created successfully');
-        // Load only the new message
         await loadNewMessages();
       } catch (error) {
         console.error('Error creating welcome message:', error);
@@ -399,11 +353,8 @@ export function CouplesChatInterface({
   useEffect(() => {
     if (!sessionId) return;
 
-    console.log('Setting up realtime subscription for session:', sessionId);
-
-    // Smart polling - starts fast, then slows down
-    let pollDelay = 2000; // Start with 2 seconds
-    const maxPollDelay = 10000; // Max 10 seconds
+    let pollDelay = 2000;
+    const maxPollDelay = 10000;
     
     const startPolling = () => {
       if (pollIntervalRef.current) {
@@ -411,10 +362,8 @@ export function CouplesChatInterface({
       }
       
       const poll = () => {
-        console.log(`Polling with ${pollDelay}ms delay`);
         loadNewMessages();
         
-        // Gradually increase delay up to max
         if (pollDelay < maxPollDelay) {
           pollDelay = Math.min(pollDelay * 1.5, maxPollDelay);
         }
@@ -427,7 +376,6 @@ export function CouplesChatInterface({
     
     startPolling();
 
-    // Set up realtime subscription
     const channel = supabase
       .channel(`room-${sessionId}`)
       .on(
@@ -439,7 +387,6 @@ export function CouplesChatInterface({
           filter: `session_id=eq.${sessionId}`
         },
         (payload) => {
-          console.log('Couple session update:', payload);
           if (payload.new.status === 'active' && isWaiting) {
             setIsWaiting(false);
             welcomeMessageCheckRef.current = false;
@@ -456,19 +403,14 @@ export function CouplesChatInterface({
           filter: `session_id=eq.${sessionId}`
         },
         (payload) => {
-          console.log('New message via realtime:', payload);
-          // Reset polling delay when new activity detected
           pollDelay = 2000;
           startPolling();
           loadNewMessages();
         }
       )
-      .subscribe((status) => {
-        console.log('Channel subscription status:', status);
-      });
+      .subscribe();
 
     return () => {
-      console.log('Cleaning up subscriptions');
       if (pollIntervalRef.current) {
         clearTimeout(pollIntervalRef.current);
       }
@@ -478,9 +420,8 @@ export function CouplesChatInterface({
 
   // Auto-scroll
   useEffect(() => {
-    const scrollElement = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
-    if (scrollElement) {
-      scrollElement.scrollTop = scrollElement.scrollHeight;
+    if (scrollAreaRef.current) {
+      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
     }
   }, [messages]);
 
@@ -504,7 +445,6 @@ export function CouplesChatInterface({
     setInput('');
     setIsLoading(true);
 
-    // Add optimistic message immediately
     const optimisticMessageId = `optimistic-${Date.now()}`;
     const optimisticMessage: Message = {
       id: optimisticMessageId,
@@ -517,9 +457,6 @@ export function CouplesChatInterface({
     setMessages(prev => [...prev, optimisticMessage]);
 
     try {
-      console.log('Sending message:', userMessage);
-      
-      // Save user message via API
       const saveResponse = await fetch('/api/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -535,15 +472,10 @@ export function CouplesChatInterface({
       if (!saveResponse.ok) {
         throw new Error('Failed to save message');
       }
-
-      console.log('User message saved successfully');
       
-      // Load new messages first
       await loadNewMessages();
       
-      // Then remove optimistic message only if the real one was loaded
       setMessages(prev => {
-        // Check if we have the real message
         const hasRealMessage = prev.some(m => 
           m.content === userMessage && 
           m.sender_id === userId && 
@@ -553,11 +485,9 @@ export function CouplesChatInterface({
         if (hasRealMessage) {
           return prev.filter(m => m.id !== optimisticMessageId);
         }
-        // Keep optimistic message if real one hasn't loaded yet
         return prev;
       });
       
-      // Format messages for API
       const apiMessages = messages
         .filter(m => m.id !== optimisticMessageId)
         .map(m => ({
@@ -586,7 +516,6 @@ export function CouplesChatInterface({
       const decoder = new TextDecoder();
       let assistantMessage = '';
 
-      // Show streaming AI response locally
       const tempAiMessageId = `temp-ai-${Date.now()}`;
       setMessages(prev => [...prev, {
         id: tempAiMessageId,
@@ -605,18 +534,13 @@ export function CouplesChatInterface({
           const chunk = decoder.decode(value);
           assistantMessage += chunk;
           
-          // Update the temporary AI message
           setMessages(prev => prev.map(msg => 
             msg.id === tempAiMessageId 
               ? { ...msg, content: assistantMessage }
               : msg
           ));
         }
-        
-        console.log('AI streaming complete. Full message:', assistantMessage);
-        console.log('About to save AI message from client...');
 
-        // Save the AI message
         try {
           const saveAIResponse = await fetch('/api/messages', {
             method: 'POST',
@@ -631,19 +555,14 @@ export function CouplesChatInterface({
 
           if (!saveAIResponse.ok) {
             console.error('Failed to save AI message');
-          } else {
-            console.log('AI message saved successfully from client');
           }
         } catch (error) {
           console.error('Error saving AI message:', error);
         }
 
-        // Load new messages first
         await loadNewMessages();
         
-        // Then remove temp message only if the real AI message was loaded
         setMessages(prev => {
-          // Check if we have the real AI message
           const hasRealAIMessage = prev.some(m => 
             m.content === assistantMessage && 
             m.sender_type === 'ai' && 
@@ -653,17 +572,14 @@ export function CouplesChatInterface({
           if (hasRealAIMessage) {
             return prev.filter(m => m.id !== tempAiMessageId);
           }
-          // Keep temp message if real one hasn't loaded yet
           return prev;
         });
       }
     } catch (error) {
       console.error('Error in handleSubmit:', error);
       
-      // Remove optimistic message on error
       setMessages(prev => prev.filter(m => m.id !== optimisticMessageId));
       
-      // Show error message
       const errorMessage: Message = {
         id: `error-${Date.now()}`,
         content: "I'm sorry, I'm having trouble connecting right now. Please try again.",
@@ -686,35 +602,100 @@ export function CouplesChatInterface({
 
   if (isWaiting) {
     return (
-      <div className="flex items-center justify-center min-h-[600px]">
-        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
-          <div className="flex items-center justify-center w-16 h-16 bg-amber-50 rounded-full mb-6 mx-auto">
-            <Users className="w-8 h-8 text-amber-600" />
+      <div style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        minHeight: '600px' 
+      }}>
+        <div style={{
+          background: 'rgba(0, 0, 0, 0.4)',
+          backdropFilter: 'blur(20px)',
+          borderRadius: '20px',
+          padding: '48px',
+          maxWidth: '420px',
+          width: '100%',
+          textAlign: 'center',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+        }}>
+          <div style={{
+            width: '64px',
+            height: '64px',
+            background: 'rgba(255, 240, 242, 0.15)',
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto 24px',
+            backdropFilter: 'blur(10px)',
+            border: '1px solid rgba(255, 200, 200, 0.3)',
+          }}>
+            <Users style={{ width: '32px', height: '32px', color: '#FFB5B5' }} />
           </div>
           
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">
+          <h2 style={{
+            fontSize: '28px',
+            fontFamily: 'Crimson Text, serif',
+            fontWeight: '400',
+            color: '#FAFAF8',
+            marginBottom: '16px',
+            textShadow: '2px 2px 4px rgba(0,0,0,0.3)',
+          }}>
             Waiting for your partner...
           </h2>
           
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
-            <p className="text-sm text-amber-800 mb-2">Share this code:</p>
-            <div className="flex items-center justify-center gap-2">
-              <p className="text-2xl font-bold text-amber-900">{sessionCode}</p>
+          <div style={{
+            background: 'rgba(255, 214, 165, 0.1)',
+            border: '1px solid rgba(255, 214, 165, 0.2)',
+            borderRadius: '14px',
+            padding: '20px',
+            marginBottom: '24px',
+            backdropFilter: 'blur(10px)',
+          }}>
+            <p style={{ fontSize: '13px', color: '#FFD6A5', marginBottom: '8px' }}>Share this code:</p>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+              <p style={{ 
+                fontSize: '28px', 
+                fontWeight: '700', 
+                color: '#FAFAF8',
+                fontFamily: 'monospace',
+                letterSpacing: '0.05em',
+              }}>
+                {sessionCode}
+              </p>
               <button
                 onClick={copyToClipboard}
-                className="p-1 hover:bg-amber-100 rounded transition-colors"
+                style={{
+                  padding: '6px',
+                  backgroundColor: copied ? 'rgba(107, 142, 127, 0.2)' : 'transparent',
+                  borderRadius: '8px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  if (!copied) e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                }}
+                onMouseLeave={(e) => {
+                  if (!copied) e.currentTarget.style.backgroundColor = 'transparent';
+                }}
               >
                 {copied ? (
-                  <Check className="w-4 h-4 text-green-600" />
+                  <Check style={{ width: '18px', height: '18px', color: '#6B8E7F' }} />
                 ) : (
-                  <Copy className="w-4 h-4 text-amber-700" />
+                  <Copy style={{ width: '18px', height: '18px', color: '#FFD6A5' }} />
                 )}
               </button>
             </div>
           </div>
           
-          <p className="text-sm text-gray-600">
-            Once they join with this code, you&apos;ll both be connected to start your session.
+          <p style={{ 
+            fontSize: '14px', 
+            color: 'rgba(255, 255, 255, 0.7)',
+            lineHeight: '1.5',
+          }}>
+            Once they join with this code, you'll both be connected to start your session.
           </p>
         </div>
       </div>
@@ -722,45 +703,83 @@ export function CouplesChatInterface({
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] max-h-[800px] w-full max-w-4xl mx-auto bg-white/90 backdrop-blur-md rounded-2xl shadow-2xl overflow-hidden border border-gray-200/50">
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%',
+      width: '100%',
+      maxWidth: '900px',
+      margin: '0 auto',
+      background: 'rgba(0, 0, 0, 0.3)',
+      backdropFilter: 'blur(20px)',
+      borderRadius: '24px',
+      overflow: 'hidden',
+      border: '1px solid rgba(255, 255, 255, 0.1)',
+      boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+    }}>
       {/* Header */}
-      <div className="bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 p-6 text-white flex-shrink-0">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-white/10 rounded-full backdrop-blur-sm">
-              <Heart className="w-6 h-6 text-amber-400" />
+      <div style={{
+        background: 'rgba(0, 0, 0, 0.4)',
+        padding: '24px 28px',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+        flexShrink: 0,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div style={{
+              padding: '10px',
+              background: 'rgba(255, 240, 242, 0.15)',
+              borderRadius: '50%',
+              backdropFilter: 'blur(10px)',
+              border: '1px solid rgba(255, 200, 200, 0.3)',
+            }}>
+              <Heart style={{ width: '24px', height: '24px', color: '#FFB5B5' }} />
             </div>
             <div>
-              <h2 className="text-xl font-bold">Couple&apos;s Session</h2>
-              <p className="text-sm text-white/70">
+              <h2 style={{
+                fontSize: '20px',
+                fontFamily: 'Crimson Text, serif',
+                fontWeight: '600',
+                color: '#FAFAF8',
+                margin: 0,
+              }}>
+                Couple's Session
+              </h2>
+              <p style={{
+                fontSize: '13px',
+                color: 'rgba(255, 255, 255, 0.6)',
+                margin: 0,
+              }}>
                 {userName} & {effectivePartnerName || partnerName || 'Partner'} with CouchTalk
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => loadNewMessages()}
-              className="text-white/60 hover:text-white transition-colors"
-              title="Check for new messages"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-            </button>
-            <div className="text-sm text-white/60">
-              Code: {sessionCode}
-            </div>
+          <div style={{
+            fontSize: '12px',
+            color: 'rgba(255, 255, 255, 0.5)',
+          }}>
+            Code: {sessionCode}
           </div>
         </div>
       </div>
 
       {/* Messages */}
-      <ScrollArea className="flex-1 min-h-0 p-6 bg-gradient-to-b from-gray-50 to-white" ref={scrollAreaRef}>
-        <div className="space-y-4 pb-4">
+      <div 
+        ref={scrollAreaRef}
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          padding: '24px',
+          background: 'rgba(0, 0, 0, 0.2)',
+        }}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', paddingBottom: '16px' }}>
           {messages.length === 0 && (
-            <div className="text-center py-8">
-              <p className="text-gray-500 mb-2">Welcome to your couple&apos;s session!</p>
-              <p className="text-sm text-gray-400">
+            <div style={{ textAlign: 'center', padding: '32px 0' }}>
+              <p style={{ color: 'rgba(255, 255, 255, 0.6)', marginBottom: '8px' }}>
+                Welcome to your couple's sanctuary!
+              </p>
+              <p style={{ fontSize: '13px', color: 'rgba(255, 255, 255, 0.4)' }}>
                 CouchTalk will help guide your conversation.
               </p>
             </div>
@@ -769,29 +788,54 @@ export function CouplesChatInterface({
           {messages.map((message) => (
             <div
               key={message.id}
-              className={`flex w-full ${
-                message.sender_id === userId ? 'justify-end' : 'justify-start'
-              }`}
+              style={{
+                display: 'flex',
+                width: '100%',
+                justifyContent: message.sender_id === userId ? 'flex-end' : 'flex-start',
+              }}
             >
               <div
-                className={`max-w-[70%] rounded-2xl px-5 py-3 ${
-                  message.sender_type === 'ai'
-                    ? 'bg-amber-50 text-gray-800 w-full'
+                style={{
+                  maxWidth: '70%',
+                  borderRadius: '18px',
+                  padding: '16px 20px',
+                  fontSize: '15px',
+                  lineHeight: '1.6',
+                  backgroundColor: message.sender_type === 'ai'
+                    ? 'rgba(255, 214, 165, 0.15)'
                     : message.sender_id === userId
-                    ? 'bg-gradient-to-r from-gray-800 to-gray-900 text-white'
-                    : 'bg-white border border-gray-200 text-gray-800'
-                }`}
+                    ? '#FFD6A5'
+                    : 'rgba(255, 255, 255, 0.1)',
+                  color: message.sender_type === 'ai' || message.sender_id !== userId
+                    ? '#FAFAF8'
+                    : '#1A1A1A',
+                  border: message.sender_type === 'ai'
+                    ? '1px solid rgba(255, 214, 165, 0.2)'
+                    : message.sender_id === userId
+                    ? '1px solid rgba(255, 214, 165, 0.3)'
+                    : '1px solid rgba(255, 255, 255, 0.2)',
+                  backdropFilter: message.sender_id === userId ? 'none' : 'blur(10px)',
+                  width: message.sender_type === 'ai' ? '100%' : 'auto',
+                }}
               >
-                <div className={`text-xs font-medium mb-1 ${
-                  message.sender_type === 'ai' 
-                    ? 'text-amber-600' 
+                <div style={{
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  marginBottom: '4px',
+                  color: message.sender_type === 'ai'
+                    ? '#FFD6A5'
                     : message.sender_id === userId
-                    ? 'text-white/70'
-                    : 'text-gray-500'
-                }`}>
-                  {message.sender_name || `User ${message.sender_id?.slice(-4) || 'Unknown'}`}
+                    ? 'rgba(26, 26, 26, 0.6)'
+                    : 'rgba(255, 255, 255, 0.6)',
+                  fontFamily: message.sender_type === 'ai' ? 'Crimson Text, serif' : 'inherit',
+                }}>
+                  {message.sender_name}
                 </div>
-                <p className="whitespace-pre-wrap leading-relaxed text-sm">
+                <p style={{ 
+                  margin: 0,
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                }}>
                   {message.content}
                 </p>
               </div>
@@ -799,41 +843,134 @@ export function CouplesChatInterface({
           ))}
           
           {isLoading && (
-            <div className="flex justify-center">
-              <div className="bg-gray-100 rounded-2xl px-4 py-3 shadow-sm">
-                <div className="flex items-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin text-gray-600" />
-                  <span className="text-sm text-gray-600">CouchTalk is thinking...</span>
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <div style={{
+                background: 'rgba(255, 255, 255, 0.1)',
+                borderRadius: '16px',
+                padding: '12px 20px',
+                backdropFilter: 'blur(10px)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Loader2 style={{ width: '16px', height: '16px', color: '#FFD6A5' }} className="animate-spin" />
+                  <span style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.8)' }}>
+                    CouchTalk is thinking...
+                  </span>
                 </div>
               </div>
             </div>
           )}
         </div>
-      </ScrollArea>
+      </div>
 
       {/* Input */}
-      <form onSubmit={handleSubmit} className="p-6 bg-white border-t border-gray-100 flex-shrink-0">
-        <div className="flex gap-3">
-          <Input
+      <form onSubmit={handleSubmit} style={{
+        padding: '24px',
+        background: 'rgba(0, 0, 0, 0.3)',
+        borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+        flexShrink: 0,
+      }}>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <input
+            type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder={isWaiting ? "Waiting for partner..." : "Share your thoughts..."}
             disabled={isLoading || isWaiting}
-            className="flex-1 h-12 px-4 border-gray-200 focus:border-amber-400 transition-colors rounded-full bg-gray-50"
+            style={{
+              flex: 1,
+              height: '48px',
+              padding: '0 20px',
+              backgroundColor: 'rgba(255, 255, 255, 0.1)',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              borderRadius: '24px',
+              fontSize: '15px',
+              color: '#FAFAF8',
+              transition: 'all 0.3s ease',
+              outline: 'none',
+              backdropFilter: 'blur(10px)',
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.borderColor = 'rgba(255, 214, 165, 0.4)';
+              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.15)';
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+            }}
           />
-          <Button 
-            type="submit" 
+          <button
+            type="submit"
             disabled={isLoading || !input.trim() || isWaiting}
-            className="h-12 w-12 rounded-full bg-gradient-to-r from-gray-800 to-gray-900 hover:from-gray-900 hover:to-black transition-all transform hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
+            style={{
+              width: '48px',
+              height: '48px',
+              borderRadius: '50%',
+              backgroundColor: isLoading || !input.trim() || isWaiting ? 'rgba(255, 214, 165, 0.3)' : '#FFD6A5',
+              color: '#1A1A1A',
+              border: 'none',
+              cursor: isLoading || !input.trim() || isWaiting ? 'not-allowed' : 'pointer',
+              transition: 'all 0.3s ease',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: isLoading || !input.trim() || isWaiting ? 0.5 : 1,
+            }}
+            onMouseEnter={(e) => {
+              if (!isLoading && input.trim() && !isWaiting) {
+                e.currentTarget.style.backgroundColor = '#FFC98B';
+                e.currentTarget.style.transform = 'scale(1.1)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!isLoading && input.trim() && !isWaiting) {
+                e.currentTarget.style.backgroundColor = '#FFD6A5';
+                e.currentTarget.style.transform = 'scale(1)';
+              }
+            }}
           >
             {isLoading ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
+              <Loader2 style={{ width: '20px', height: '20px' }} className="animate-spin" />
             ) : (
-              <Send className="w-5 h-5" />
+              <Send style={{ width: '20px', height: '20px' }} />
             )}
-          </Button>
+          </button>
         </div>
       </form>
+
+      {/* Scrollbar styles */}
+      <style jsx>{`
+        div::-webkit-scrollbar {
+          width: 8px;
+        }
+        
+        div::-webkit-scrollbar-track {
+          background: rgba(255, 255, 255, 0.05);
+          border-radius: 4px;
+        }
+        
+        div::-webkit-scrollbar-thumb {
+          background: rgba(255, 214, 165, 0.3);
+          border-radius: 4px;
+        }
+        
+        div::-webkit-scrollbar-thumb:hover {
+          background: rgba(255, 214, 165, 0.5);
+        }
+        
+        input::placeholder {
+          color: rgba(255, 255, 255, 0.4);
+        }
+        
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        
+        .animate-spin {
+          animation: spin 1s linear infinite;
+        }
+      `}</style>
     </div>
   );
 }

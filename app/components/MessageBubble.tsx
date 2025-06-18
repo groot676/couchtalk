@@ -1,5 +1,3 @@
-import { cn } from '@/lib/utils';
-
 interface MessageBubbleProps {
   message: {
     role: 'user' | 'assistant';
@@ -12,23 +10,54 @@ export function MessageBubble({ message }: MessageBubbleProps) {
 
   return (
     <div
-      className={cn(
-        'flex w-full animate-in fade-in-0 slide-in-from-bottom-2 duration-300',
-        isUser ? 'justify-end' : 'justify-start'
-      )}
+      style={{
+        display: 'flex',
+        width: '100%',
+        justifyContent: isUser ? 'flex-end' : 'flex-start',
+        animation: 'fadeIn 0.3s ease',
+      }}
     >
       <div
-        className={cn(
-          'max-w-[80%] rounded-2xl px-5 py-3 text-sm shadow-sm transition-all',
-          isUser
-            ? 'bg-gradient-to-r from-gray-800 to-gray-900 text-white'
-            : 'bg-white border border-gray-200 text-gray-800'
-        )}
+        style={{
+          maxWidth: '75%',
+          borderRadius: '18px',
+          padding: '16px 20px',
+          fontSize: '15px',
+          lineHeight: '1.6',
+          boxShadow: isUser 
+            ? '0 4px 12px rgba(255, 214, 165, 0.2)' 
+            : '0 4px 12px rgba(0, 0, 0, 0.2)',
+          backgroundColor: isUser 
+            ? '#FFD6A5' 
+            : 'rgba(255, 255, 255, 0.1)',
+          color: isUser 
+            ? '#1A1A1A' 
+            : '#FAFAF8',
+          border: isUser 
+            ? '1px solid rgba(255, 214, 165, 0.3)' 
+            : '1px solid rgba(255, 255, 255, 0.2)',
+          backdropFilter: isUser ? 'none' : 'blur(10px)',
+          transition: 'all 0.2s ease',
+        }}
       >
         {!isUser && (
-          <div className="text-xs text-amber-600 font-medium mb-1">CouchTalk</div>
+          <div style={{
+            fontSize: '12px',
+            color: '#FFD6A5',
+            fontWeight: '600',
+            marginBottom: '4px',
+            fontFamily: 'Crimson Text, serif',
+          }}>
+            CouchTalk
+          </div>
         )}
-        <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
+        <p style={{ 
+          margin: 0,
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+        }}>
+          {message.content}
+        </p>
       </div>
     </div>
   );

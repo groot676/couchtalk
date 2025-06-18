@@ -1,9 +1,18 @@
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
+import { Inter, Crimson_Text } from 'next/font/google'
 import Script from 'next/script'
 import './globals.css'
 
-const inter = Inter({ subsets: ['latin'] })
+const inter = Inter({ 
+  subsets: ['latin'],
+  variable: '--font-sans',
+})
+
+const crimsonText = Crimson_Text({ 
+  weight: ['400', '600', '700'],
+  subsets: ['latin'],
+  variable: '--font-serif',
+})
 
 export const metadata: Metadata = {
   title: 'CouchTalk - AI Therapy Companion',
@@ -24,8 +33,8 @@ export default function RootLayout({
   const gaId = process.env.NEXT_PUBLIC_GA_ID;
 
   return (
-    <html lang="en">
-      <body className={inter.className}>
+    <html lang="en" className={`${inter.variable} ${crimsonText.variable}`}>
+      <body className={`${inter.className} font-sans`}>
         {children}
         {gaId && (
           <>

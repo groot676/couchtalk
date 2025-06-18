@@ -1,9 +1,6 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { MessageBubble } from './MessageBubble';
 import { Send, Loader2, Brain, Sparkles } from 'lucide-react';
 import { INITIAL_MESSAGE } from '@/lib/prompts';
@@ -53,10 +50,8 @@ export function ChatInterface() {
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    // ScrollArea component has a viewport child that actually scrolls
-    const scrollElement = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
-    if (scrollElement) {
-      scrollElement.scrollTop = scrollElement.scrollHeight;
+    if (scrollAreaRef.current) {
+      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
     }
   }, [messages]);
 
@@ -139,70 +134,169 @@ export function ChatInterface() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-12rem)] max-h-[800px] w-full max-w-4xl mx-auto bg-white/90 backdrop-blur-md rounded-2xl shadow-2xl overflow-hidden border border-gray-200/50">
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%',
+      width: '100%',
+      maxWidth: '900px',
+      margin: '0 auto',
+      background: 'rgba(0, 0, 0, 0.3)',
+      backdropFilter: 'blur(20px)',
+      borderRadius: '24px',
+      overflow: 'hidden',
+      border: '1px solid rgba(255, 255, 255, 0.1)',
+      boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+    }}>
       {/* Header */}
-      <div className="bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 p-6 text-white flex-shrink-0">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-white/10 rounded-full backdrop-blur-sm">
-              <Brain className="w-6 h-6 text-amber-400" />
+      <div style={{
+        background: 'rgba(0, 0, 0, 0.4)',
+        padding: '24px 28px',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+        flexShrink: 0,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div style={{
+              padding: '10px',
+              background: 'rgba(255, 214, 165, 0.15)',
+              borderRadius: '50%',
+              backdropFilter: 'blur(10px)',
+              border: '1px solid rgba(255, 214, 165, 0.2)',
+            }}>
+              <Brain style={{ width: '24px', height: '24px', color: '#FFD6A5' }} />
             </div>
             <div>
-              <h2 className="text-xl font-bold flex items-center gap-2">
+              <h2 style={{
+                fontSize: '20px',
+                fontFamily: 'Crimson Text, serif',
+                fontWeight: '600',
+                color: '#FAFAF8',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                margin: 0,
+              }}>
                 CouchTalk
-                <Sparkles className="w-4 h-4 text-amber-400" />
+                <Sparkles style={{ width: '16px', height: '16px', color: '#FFD6A5' }} />
               </h2>
-              <p className="text-sm text-white/70">Your safe space to reflect and grow</p>
+              <p style={{
+                fontSize: '13px',
+                color: 'rgba(255, 255, 255, 0.6)',
+                margin: 0,
+              }}>
+                Your safe space to reflect and grow
+              </p>
             </div>
           </div>
-          <button className="text-white/60 hover:text-white transition-colors">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 5v14M5 12h14"/>
-            </svg>
-          </button>
         </div>
       </div>
 
       {/* Messages */}
-      <ScrollArea className="flex-1 min-h-0 p-6 bg-gradient-to-b from-gray-50 to-white" ref={scrollAreaRef}>
-        <div className="space-y-4 pb-4">
+      <div 
+        ref={scrollAreaRef}
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          padding: '24px',
+          background: 'rgba(0, 0, 0, 0.2)',
+        }}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', paddingBottom: '16px' }}>
           {messages.map((message, index) => (
             <MessageBubble key={index} message={message} />
           ))}
           {isLoading && (
-            <div className="flex justify-start">
-              <div className="bg-gray-100 rounded-2xl px-4 py-3 shadow-sm">
-                <div className="flex items-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin text-gray-600" />
-                  <span className="text-sm text-gray-600">Thinking...</span>
+            <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+              <div style={{
+                background: 'rgba(255, 255, 255, 0.1)',
+                borderRadius: '16px',
+                padding: '12px 20px',
+                backdropFilter: 'blur(10px)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Loader2 style={{ width: '16px', height: '16px', color: '#FFD6A5' }} className="animate-spin" />
+                  <span style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.8)' }}>Thinking...</span>
                 </div>
               </div>
             </div>
           )}
         </div>
-      </ScrollArea>
+      </div>
 
       {/* Input */}
-      <form onSubmit={handleSubmit} className="p-6 bg-white border-t border-gray-100 flex-shrink-0">
-        <div className="flex gap-3">
-          <Input
+      <form onSubmit={handleSubmit} style={{
+        padding: '24px',
+        background: 'rgba(0, 0, 0, 0.3)',
+        borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+        flexShrink: 0,
+      }}>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <input
+            type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Share what's on your mind..."
             disabled={isLoading}
-            className="flex-1 h-12 px-4 border-gray-200 focus:border-amber-400 transition-colors rounded-full bg-gray-50"
+            style={{
+              flex: 1,
+              height: '48px',
+              padding: '0 20px',
+              backgroundColor: 'rgba(255, 255, 255, 0.1)',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              borderRadius: '24px',
+              fontSize: '15px',
+              color: '#FAFAF8',
+              transition: 'all 0.3s ease',
+              outline: 'none',
+              backdropFilter: 'blur(10px)',
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.borderColor = 'rgba(255, 214, 165, 0.4)';
+              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.15)';
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+            }}
           />
-          <Button 
-            type="submit" 
+          <button
+            type="submit"
             disabled={isLoading || !input.trim()}
-            className="h-12 w-12 rounded-full bg-gradient-to-r from-gray-800 to-gray-900 hover:from-gray-900 hover:to-black transition-all transform hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
+            style={{
+              width: '48px',
+              height: '48px',
+              borderRadius: '50%',
+              backgroundColor: isLoading || !input.trim() ? 'rgba(255, 214, 165, 0.3)' : '#FFD6A5',
+              color: '#1A1A1A',
+              border: 'none',
+              cursor: isLoading || !input.trim() ? 'not-allowed' : 'pointer',
+              transition: 'all 0.3s ease',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: isLoading || !input.trim() ? 0.5 : 1,
+            }}
+            onMouseEnter={(e) => {
+              if (!isLoading && input.trim()) {
+                e.currentTarget.style.backgroundColor = '#FFC98B';
+                e.currentTarget.style.transform = 'scale(1.1)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!isLoading && input.trim()) {
+                e.currentTarget.style.backgroundColor = '#FFD6A5';
+                e.currentTarget.style.transform = 'scale(1)';
+              }
+            }}
           >
             {isLoading ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
+              <Loader2 style={{ width: '20px', height: '20px' }} className="animate-spin" />
             ) : (
-              <Send className="w-5 h-5" />
+              <Send style={{ width: '20px', height: '20px' }} />
             )}
-          </Button>
+          </button>
         </div>
       </form>
     </div>
