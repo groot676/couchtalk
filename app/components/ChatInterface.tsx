@@ -5,6 +5,7 @@ import { MessageBubble } from './MessageBubble';
 import { Send, Loader2, Brain, Sparkles } from 'lucide-react';
 import { INITIAL_MESSAGE } from '@/lib/prompts';
 import { createClient } from '@/lib/supabase/client';
+import { UsageIndicator } from '@/components/ui/UsageIndicator';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -20,6 +21,7 @@ export function ChatInterface() {
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [refreshUsage, setRefreshUsage] = useState(0); // Add this
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   // Create or get session on mount
@@ -94,7 +96,29 @@ export function ChatInterface() {
         }),
       });
 
-      if (!chatResponse.ok) throw new Error('Failed to get response');
+      if (!chatResponse.ok) {
+        // Check if it's a rate limit error
+        if (chatResponse.status === 429) {
+          const errorData = await chatResponse.json();
+          throw new Error(errorData.message || 'Message limit reached');
+        }
+        
+        // Log detailed error for debugging
+        console.error('Chat API error:', {
+          status: chatResponse.status,
+          statusText: chatResponse.statusText,
+          headers: Object.fromEntries(chatResponse.headers.entries())
+        });
+        
+        const errorText = await chatResponse.text();
+        console.error('Error response:', errorText);
+        
+        throw new Error(`Chat API error: ${chatResponse.status} ${chatResponse.statusText}`);
+      }
+
+      // Check the remaining messages from response headers
+      const remainingMessages = chatResponse.headers.get('X-Remaining-Messages');
+      console.log('Remaining messages from header:', remainingMessages);
 
       // Handle streaming response
       const reader = chatResponse.body?.getReader();
@@ -121,11 +145,18 @@ export function ChatInterface() {
           });
         }
       }
+      
+      // Add a small delay to ensure the backend has finished updating the count
+      setTimeout(() => {
+        setRefreshUsage(prev => prev + 1);
+      }, 1000);
     } catch (error) {
       console.error('Error:', error);
       const errorMessage = {
         role: 'assistant' as const,
-        content: "I'm sorry, I'm having trouble connecting right now. Please try again."
+        content: error instanceof Error ? 
+          error.message : 
+          "I'm sorry, I'm having trouble connecting right now. Please try again."
       };
       setMessages(prev => [...prev, errorMessage]);
     } finally {
@@ -134,171 +165,176 @@ export function ChatInterface() {
   };
 
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      height: '100%',
-      width: '100%',
-      maxWidth: '900px',
-      margin: '0 auto',
-      background: 'rgba(0, 0, 0, 0.3)',
-      backdropFilter: 'blur(20px)',
-      borderRadius: '24px',
-      overflow: 'hidden',
-      border: '1px solid rgba(255, 255, 255, 0.1)',
-      boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
-    }}>
-      {/* Header */}
+    <>
       <div style={{
-        background: 'rgba(0, 0, 0, 0.4)',
-        padding: '24px 28px',
-        borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
-        flexShrink: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        width: '100%',
+        maxWidth: '900px',
+        margin: '0 auto',
+        background: 'rgba(0, 0, 0, 0.3)',
+        backdropFilter: 'blur(20px)',
+        borderRadius: '24px',
+        overflow: 'hidden',
+        border: '1px solid rgba(255, 255, 255, 0.1)',
+        boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <div style={{
-              padding: '10px',
-              background: 'rgba(255, 214, 165, 0.15)',
-              borderRadius: '50%',
-              backdropFilter: 'blur(10px)',
-              border: '1px solid rgba(255, 214, 165, 0.2)',
-            }}>
-              <Brain style={{ width: '24px', height: '24px', color: '#FFD6A5' }} />
-            </div>
-            <div>
-              <h2 style={{
-                fontSize: '20px',
-                fontFamily: 'Crimson Text, serif',
-                fontWeight: '600',
-                color: '#FAFAF8',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                margin: 0,
+        {/* Header */}
+        <div style={{
+          background: 'rgba(0, 0, 0, 0.4)',
+          padding: '24px 28px',
+          borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+          flexShrink: 0,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <div style={{
+                padding: '10px',
+                background: 'rgba(255, 214, 165, 0.15)',
+                borderRadius: '50%',
+                backdropFilter: 'blur(10px)',
+                border: '1px solid rgba(255, 214, 165, 0.2)',
               }}>
-                CouchTalk
-                <Sparkles style={{ width: '16px', height: '16px', color: '#FFD6A5' }} />
-              </h2>
-              <p style={{
-                fontSize: '13px',
-                color: 'rgba(255, 255, 255, 0.6)',
-                margin: 0,
-              }}>
-                Your safe space to reflect and grow
-              </p>
+                <Brain style={{ width: '24px', height: '24px', color: '#FFD6A5' }} />
+              </div>
+              <div>
+                <h2 style={{
+                  fontSize: '20px',
+                  fontFamily: 'Crimson Text, serif',
+                  fontWeight: '600',
+                  color: '#FAFAF8',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  margin: 0,
+                }}>
+                  CouchTalk
+                  <Sparkles style={{ width: '16px', height: '16px', color: '#FFD6A5' }} />
+                </h2>
+                <p style={{
+                  fontSize: '13px',
+                  color: 'rgba(255, 255, 255, 0.6)',
+                  margin: 0,
+                }}>
+                  Your safe space to reflect and grow
+                </p>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Messages */}
-      <div 
-        ref={scrollAreaRef}
-        style={{
-          flex: 1,
-          overflowY: 'auto',
-          padding: '24px',
-          background: 'rgba(0, 0, 0, 0.2)',
-        }}
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', paddingBottom: '16px' }}>
-          {messages.map((message, index) => (
-            <MessageBubble key={index} message={message} />
-          ))}
-          {isLoading && (
-            <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-              <div style={{
-                background: 'rgba(255, 255, 255, 0.1)',
-                borderRadius: '16px',
-                padding: '12px 20px',
-                backdropFilter: 'blur(10px)',
-                border: '1px solid rgba(255, 255, 255, 0.2)',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Loader2 style={{ width: '16px', height: '16px', color: '#FFD6A5' }} className="animate-spin" />
-                  <span style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.8)' }}>Thinking...</span>
+        {/* Messages */}
+        <div 
+          ref={scrollAreaRef}
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            padding: '24px',
+            background: 'rgba(0, 0, 0, 0.2)',
+          }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', paddingBottom: '16px' }}>
+            {messages.map((message, index) => (
+              <MessageBubble key={index} message={message} />
+            ))}
+            {isLoading && (
+              <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  borderRadius: '16px',
+                  padding: '12px 20px',
+                  backdropFilter: 'blur(10px)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Loader2 style={{ width: '16px', height: '16px', color: '#FFD6A5' }} className="animate-spin" />
+                    <span style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.8)' }}>Thinking...</span>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Input */}
-      <form onSubmit={handleSubmit} style={{
-        padding: '24px',
-        background: 'rgba(0, 0, 0, 0.3)',
-        borderTop: '1px solid rgba(255, 255, 255, 0.1)',
-        flexShrink: 0,
-      }}>
-        <div style={{ display: 'flex', gap: '12px' }}>
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Share what's on your mind..."
-            disabled={isLoading}
-            style={{
-              flex: 1,
-              height: '48px',
-              padding: '0 20px',
-              backgroundColor: 'rgba(255, 255, 255, 0.1)',
-              border: '1px solid rgba(255, 255, 255, 0.2)',
-              borderRadius: '24px',
-              fontSize: '15px',
-              color: '#FAFAF8',
-              transition: 'all 0.3s ease',
-              outline: 'none',
-              backdropFilter: 'blur(10px)',
-            }}
-            onFocus={(e) => {
-              e.currentTarget.style.borderColor = 'rgba(255, 214, 165, 0.4)';
-              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.15)';
-            }}
-            onBlur={(e) => {
-              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
-            }}
-          />
-          <button
-            type="submit"
-            disabled={isLoading || !input.trim()}
-            style={{
-              width: '48px',
-              height: '48px',
-              borderRadius: '50%',
-              backgroundColor: isLoading || !input.trim() ? 'rgba(255, 214, 165, 0.3)' : '#FFD6A5',
-              color: '#1A1A1A',
-              border: 'none',
-              cursor: isLoading || !input.trim() ? 'not-allowed' : 'pointer',
-              transition: 'all 0.3s ease',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              opacity: isLoading || !input.trim() ? 0.5 : 1,
-            }}
-            onMouseEnter={(e) => {
-              if (!isLoading && input.trim()) {
-                e.currentTarget.style.backgroundColor = '#FFC98B';
-                e.currentTarget.style.transform = 'scale(1.1)';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (!isLoading && input.trim()) {
-                e.currentTarget.style.backgroundColor = '#FFD6A5';
-                e.currentTarget.style.transform = 'scale(1)';
-              }
-            }}
-          >
-            {isLoading ? (
-              <Loader2 style={{ width: '20px', height: '20px' }} className="animate-spin" />
-            ) : (
-              <Send style={{ width: '20px', height: '20px' }} />
             )}
-          </button>
+          </div>
         </div>
-      </form>
-    </div>
+
+        {/* Input */}
+        <form onSubmit={handleSubmit} style={{
+          padding: '24px',
+          background: 'rgba(0, 0, 0, 0.3)',
+          borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+          flexShrink: 0,
+        }}>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Share what's on your mind..."
+              disabled={isLoading}
+              style={{
+                flex: 1,
+                height: '48px',
+                padding: '0 20px',
+                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                borderRadius: '24px',
+                fontSize: '15px',
+                color: '#FAFAF8',
+                transition: 'all 0.3s ease',
+                outline: 'none',
+                backdropFilter: 'blur(10px)',
+              }}
+              onFocus={(e) => {
+                e.currentTarget.style.borderColor = 'rgba(255, 214, 165, 0.4)';
+                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.15)';
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+              }}
+            />
+            <button
+              type="submit"
+              disabled={isLoading || !input.trim()}
+              style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '50%',
+                backgroundColor: isLoading || !input.trim() ? 'rgba(255, 214, 165, 0.3)' : '#FFD6A5',
+                color: '#1A1A1A',
+                border: 'none',
+                cursor: isLoading || !input.trim() ? 'not-allowed' : 'pointer',
+                transition: 'all 0.3s ease',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: isLoading || !input.trim() ? 0.5 : 1,
+              }}
+              onMouseEnter={(e) => {
+                if (!isLoading && input.trim()) {
+                  e.currentTarget.style.backgroundColor = '#FFC98B';
+                  e.currentTarget.style.transform = 'scale(1.1)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isLoading && input.trim()) {
+                  e.currentTarget.style.backgroundColor = '#FFD6A5';
+                  e.currentTarget.style.transform = 'scale(1)';
+                }
+              }}
+            >
+              {isLoading ? (
+                <Loader2 style={{ width: '20px', height: '20px' }} className="animate-spin" />
+              ) : (
+                <Send style={{ width: '20px', height: '20px' }} />
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+      
+      {/* Usage Indicator - only show for authenticated users */}
+      {userId && <UsageIndicator userId={userId} refreshTrigger={refreshUsage} />}
+    </>
   );
 }

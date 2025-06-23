@@ -1,8 +1,8 @@
 // /app/api/chat/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { openai, MODEL } from '@/lib/openai';
-import { THERAPIST_SYSTEM_PROMPT } from '@/lib/prompts';
 import { createClient } from '@/lib/supabase/server';
+import { ProviderFactory } from '@/lib/ai-providers';
+import { THERAPIST_SYSTEM_PROMPT } from '@/lib/prompts';
 import { saveEncryptedMessage } from '@/lib/encryption/messages';
 
 const COUPLES_SYSTEM_PROMPT = `You are a warm, empathetic couples therapist trained in Emotionally Focused Therapy (EFT) and the Gottman Method. Your role is to facilitate healthy communication between partners, helping them understand each other better and work through challenges together.
@@ -40,77 +40,140 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Get authorization header to pass to internal API calls
+    const authHeader = request.headers.get('authorization');
+    const cookieHeader = request.headers.get('cookie');
+
+    // Authenticate user if userId is provided
+    if (userId) {
+      const supabase = await createClient();
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      if (authError || !user || user.id !== userId) {
+        return NextResponse.json(
+          { error: 'Unauthorized' },
+          { status: 401 }
+        );
+      }
+    }
+
+    // Check message limit and get provider
+    let provider, subscription, limitCheck;
+    
+    if (userId) {
+      // Check if user can send message
+      limitCheck = await ProviderFactory.checkMessageLimit(userId);
+      
+      if (!limitCheck.canSendMessage) {
+        return NextResponse.json(
+          {
+            error: 'Message limit reached',
+            remainingMessages: 0,
+            tier: limitCheck.tier,
+            message: 'You\'ve reached your monthly message limit. Please upgrade to Premium for unlimited messages.'
+          },
+          { status: 429 }
+        );
+      }
+      
+      // Get the appropriate provider for this user
+      const providerInfo = await ProviderFactory.getProviderForUser(userId);
+      provider = providerInfo.provider;
+      subscription = providerInfo.subscription;
+    } else {
+      // Unauthenticated users get Groq (free tier experience)
+      const { GroqProvider } = await import('@/lib/ai-providers/groq-provider');
+      provider = new GroqProvider();
+      subscription = { tier: 'free' };
+      limitCheck = { canSendMessage: true, remainingMessages: 50, tier: 'free' };
+    }
+
+    // Determine system prompt based on mode
     const systemPrompt = mode === 'couple' ? COUPLES_SYSTEM_PROMPT : THERAPIST_SYSTEM_PROMPT;
 
-    const completion = await openai.chat.completions.create({
-      model: MODEL,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        ...messages
-      ],
-      temperature: 0.7,
-      max_tokens: 500,
-      stream: true,
-    });
+    // Format messages for the AI provider
+    const formattedMessages = [
+      { role: 'system' as const, content: systemPrompt },
+      ...messages
+    ];
 
-    // Create a ReadableStream to send the response
+    // Create a streaming response
     let assistantMessage = '';
+    const encoder = new TextEncoder();
+    
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          for await (const chunk of completion) {
-            const content = chunk.choices[0]?.delta?.content || '';
-            if (content) {
-              assistantMessage += content;
-              controller.enqueue(new TextEncoder().encode(content));
-            }
+          // Stream the response
+          for await (const chunk of provider.stream(formattedMessages)) {
+            assistantMessage += chunk;
+            controller.enqueue(encoder.encode(chunk));
           }
+          
           controller.close();
           console.log('Streaming complete, assistantMessage length:', assistantMessage.length);
 
-          
           // After streaming is complete, save the AI message
           if (sessionId && userId) {
             console.log('Have sessionId and userId, attempting to save...');
             try {
               console.log(`Saving AI message for session ${sessionId}, mode: ${mode}`);
               
-              // Let the messages API handle the encryption logic
-              const saveResponse = await fetch(new URL('/api/messages', request.url).toString(), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  sessionId,
-                  userId,  // Pass the current user ID
-                  content: assistantMessage,
-                  senderType: 'ai'
-                }),
-              });
+              // Import and directly call saveEncryptedMessage instead of HTTP request
+              const { saveEncryptedMessage } = await import('@/lib/encryption/messages');
               
-              if (!saveResponse.ok) {
-                const error = await saveResponse.text();
-                console.error('Failed to save AI message:', error);
-              } else {
-                console.log('AI message saved successfully');
-              }
+              // Save the AI message directly
+              await saveEncryptedMessage(
+                sessionId,
+                userId,
+                'ai',
+                assistantMessage
+              );
+              
+              console.log('AI message saved successfully');
             } catch (error) {
               console.error('Error saving AI message:', error);
             }
           }
+
+          // Increment message count after successful response (for authenticated users)
+          if (userId) {
+            await ProviderFactory.incrementMessageCount(userId);
+          }
+          
         } catch (error) {
+          console.error('Streaming error:', error);
           controller.error(error);
         }
       },
     });
 
+    // Return the stream with appropriate headers
     return new Response(stream, {
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
         'Cache-Control': 'no-cache',
+        'X-Model-Used': provider.model,
+        'X-Provider': provider.name,
+        'X-User-Tier': subscription?.tier || 'unknown',
+        'X-Remaining-Messages': limitCheck?.remainingMessages?.toString() || 'unlimited'
       },
     });
+    
   } catch (error) {
     console.error('Error in chat API:', error);
+    
+    // Check if it's a message limit error
+    if (error instanceof Error && error.message.includes('limit reached')) {
+      return NextResponse.json(
+        { 
+          error: error.message,
+          upgrade: true 
+        },
+        { status: 429 }
+      );
+    }
+    
     return NextResponse.json(
       { error: 'Failed to process chat request' },
       { status: 500 }
