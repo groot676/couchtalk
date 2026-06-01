@@ -1,36 +1,71 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Couchtalk
+
+An AI-powered therapeutic conversation application built with modern web technologies.
+
+## About
+
+Couchtalk is a web application that provides an AI therapist interface for supportive conversations. It combines cutting-edge AI models with a user-friendly interface to create a platform for meaningful dialogue.
+
+## Current Status
+
+- **Created**: June 14, 2025
+- **Last Updated**: June 23, 2025
+- **Visibility**: Public
+- **Live Demo**: [couchtalk.vercel.app](https://couchtalk.vercel.app)
+
+## Tech Stack
+
+- **Frontend**: Next.js 15, React 19, TypeScript
+- **Styling**: Tailwind CSS, Radix UI components
+- **Backend**: Supabase
+- **AI**: OpenAI, Groq
+- **Database**: Supabase PostgreSQL
+- **Deployment**: Vercel
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+- Node.js 18+
+- npm or yarn
+
+### Installation
+
+```bash
+npm install
+```
+
+### Development
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Visit `http://localhost:3000` to see the application.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Build for Production
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run build
+npm start
+```
 
-## Learn More
+## Key Features
 
-To learn more about Next.js, take a look at the following resources:
+- Real-time AI conversations
+- Multiple AI model support (OpenAI, Groq)
+- Responsive design
+- User authentication via Supabase
+- Conversation history
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Dependencies
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `next` - React framework
+- `@supabase/supabase-js` - Database & auth
+- `openai` - OpenAI integration
+- `groq-sdk` - Groq integration
+- `@radix-ui/*` - UI components
+- `tailwindcss` - Styling
 
-## Deploy on Vercel
+## License
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+See LICENSE file for details
